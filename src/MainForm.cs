@@ -28,7 +28,7 @@ public class MainForm : Form
             HideSelection = false,
             SmallImageList = _icons,
         };
-        _list.Columns.Add("Сайт", 200);
+        _list.Columns.Add("Название", 200);
         _list.Columns.Add("Когда", 200);
         _list.Columns.Add("Следующее", 130);
         _list.Columns.Add("Текст уведомления", 300);
@@ -50,7 +50,9 @@ public class MainForm : Form
             AutoSize = true,
             Padding = new Padding(6),
         };
-        buttons.Controls.AddRange(new Control[] { add, _edit, _delete, _test });
+        var templates = new Button { Text = "Игры и шаблоны…", AutoSize = true };
+        templates.Click += (_, _) => ShowTemplates();
+        buttons.Controls.AddRange(new Control[] { add, templates, _edit, _delete, _test });
 
         var autostart = new CheckBox { Text = "Запускать вместе с Windows", AutoSize = true, Checked = Autostart.Enabled };
         autostart.CheckedChanged += (_, _) => Autostart.Enabled = autostart.Checked;
@@ -71,7 +73,7 @@ public class MainForm : Form
         };
         bottom.Controls.AddRange(new Control[] { autostart, catchUp });
 
-        var sitesPage = new TabPage("Сайты по расписанию");
+        var sitesPage = new TabPage("Ежедневные");
         sitesPage.Controls.Add(_list);
         sitesPage.Controls.Add(buttons);
 
@@ -223,7 +225,7 @@ public class MainForm : Form
             else if (!s.Enabled) next = "выключено";
             else next = Schedule.NextOccurrence(s, now) is { } n ? FormatNext(n, now) : "—";
 
-            var item = new ListViewItem(string.IsNullOrWhiteSpace(s.Name) ? s.Host : s.Name, imageIndex) { Tag = s };
+            var item = new ListViewItem(s.DisplayName, imageIndex) { Tag = s };
             item.SubItems.Add(s.ScheduleText());
             item.SubItems.Add(next);
             item.SubItems.Add(string.IsNullOrWhiteSpace(s.Title) ? s.Text : $"{s.Title}. {s.Text}");
@@ -248,6 +250,7 @@ public class MainForm : Form
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
         Store.Data.Sites.Add(dlg.Entry);
         Store.Save();
+        Notifier.Prepare(dlg.Entry);
         RefreshList();
     }
 
@@ -260,6 +263,7 @@ public class MainForm : Form
         var i = Store.Data.Sites.IndexOf(s);
         Store.Data.Sites[i] = dlg.Entry;
         Store.Save();
+        Notifier.Prepare(dlg.Entry);
         RefreshList();
     }
 
@@ -271,8 +275,37 @@ public class MainForm : Form
                 MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
         Store.Data.Sites.Remove(s);
         Store.Save();
-        Notifier.Unregister(s.Id);
-        if (s.IconFile.StartsWith(Store.IconsDir)) try { File.Delete(s.IconFile); } catch { }
+        CleanUp(s);
         RefreshList();
+    }
+
+    static void CleanUp(SiteEntry s)
+    {
+        Notifier.Remove(s);
+        if (s.IconFile.StartsWith(Store.IconsDir))
+        {
+            try { File.Delete(s.IconFile); } catch { }
+            try { File.Delete(Path.ChangeExtension(s.IconFile, ".ico")); } catch { }
+        }
+    }
+
+    async void ShowTemplates()
+    {
+        List<SiteEntry> added;
+        using (var dlg = new TemplatesForm())
+        {
+            if (dlg.ShowDialog(this) != DialogResult.OK) return;
+            var (a, removed) = dlg.Apply();
+            added = a;
+            foreach (var r in removed) CleanUp(r);
+        }
+        RefreshList();
+        // Icons come from the games' sites; fill them in as they arrive.
+        foreach (var e in added)
+        {
+            try { await FaviconFetcher.EnsureIconAsync(e); } catch { }
+            Notifier.Prepare(e);
+            RefreshList();
+        }
     }
 }

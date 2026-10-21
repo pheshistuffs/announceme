@@ -38,9 +38,21 @@ public class EditForm : Form
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 440));
 
-        _url = new TextBox { Text = entry.Url, Dock = DockStyle.Fill, PlaceholderText = "https://www.chess.com/" };
+        _url = new TextBox
+        {
+            Text = entry.Url,
+            Dock = DockStyle.Fill,
+            PlaceholderText = "сайт, steam://… или программа; можно оставить пустым",
+        };
         _url.Leave += (_, _) => OnUrlLeave();
-        _name = new TextBox { Text = entry.Name, Dock = DockStyle.Fill, PlaceholderText = "chess.com" };
+        var pickProgram = new Button { Text = "Программа…", AutoSize = true, Margin = new Padding(4, 0, 0, 0) };
+        pickProgram.Click += (_, _) => PickProgram();
+        var urlRow = new TableLayoutPanel { ColumnCount = 2, Dock = DockStyle.Fill, AutoSize = true, Margin = Padding.Empty };
+        urlRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        urlRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        urlRow.Controls.Add(_url, 0, 0);
+        urlRow.Controls.Add(pickProgram, 1, 0);
+        _name = new TextBox { Text = entry.Name, Dock = DockStyle.Fill, PlaceholderText = "chess.com, Genshin Impact, Тренировка…" };
         _title = new TextBox { Text = entry.Title, Dock = DockStyle.Fill, PlaceholderText = "необязательно" };
         _text = new TextBox
         {
@@ -99,8 +111,8 @@ public class EditForm : Form
         };
         _enabled = new CheckBox { Text = "Включено", AutoSize = true, Checked = entry.Enabled };
 
-        AddRow(grid, "Адрес сайта:", _url);
-        AddRow(grid, "От кого (имя):", _name);
+        AddRow(grid, "Ссылка:", urlRow);
+        AddRow(grid, "Название:", _name);
         AddRow(grid, "Заголовок:", _title);
         AddRow(grid, "Текст:", _text);
         AddRow(grid, "Иконка:", iconRow);
@@ -152,34 +164,68 @@ public class EditForm : Form
         grid.RowCount++;
     }
 
+    // Web addresses get https:// added; links with a scheme and paths on disk stay as they are.
     static string NormalizeUrl(string s)
     {
-        s = s.Trim();
+        s = s.Trim().Trim('"');
         if (s.Length == 0) return s;
-        if (!s.Contains("://")) s = "https://" + s;
-        return s;
+        if (s.Contains("://") || IsPath(s)) return s;
+        return "https://" + s;
     }
+
+    static bool IsPath(string s) => s.Length > 2 && (s[1] == ':' || s.StartsWith(@"\\"));
+
+    static bool IsWeb(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var u) && (u.Scheme == "http" || u.Scheme == "https");
 
     async void OnUrlLeave()
     {
         var url = NormalizeUrl(_url.Text);
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var u)) return;
+        if (url.Length == 0) return;
         _url.Text = url;
         if (string.IsNullOrWhiteSpace(_name.Text))
-            _name.Text = u.Host.StartsWith("www.") ? u.Host[4..] : u.Host;
-        if (_icon.Image == null) await FetchIconAsync();
+        {
+            if (IsWeb(url))
+            {
+                var host = new Uri(url).Host;
+                _name.Text = host.StartsWith("www.") ? host[4..] : host;
+            }
+            else if (IsPath(url))
+                _name.Text = Path.GetFileNameWithoutExtension(url);
+        }
+        if (_icon.Image == null && (IsWeb(url) || IsPath(url) || !string.IsNullOrEmpty(Entry.IconSite)))
+            await FetchIconAsync();
+    }
+
+    void PickProgram()
+    {
+        using var dlg = new OpenFileDialog
+        {
+            Title = "Программа или игра",
+            Filter = "Программы и ярлыки|*.exe;*.lnk;*.url|Все файлы|*.*",
+            DereferenceLinks = false,
+        };
+        if (dlg.ShowDialog(this) != DialogResult.OK) return;
+        _url.Text = dlg.FileName;
+        _name.Text = Path.GetFileNameWithoutExtension(dlg.FileName);
+        var bmp = FaviconFetcher.FromFile(dlg.FileName);
+        if (bmp != null)
+        {
+            SetPendingIcon(bmp);
+            _iconStatus.Text = "из программы";
+        }
     }
 
     async Task FetchIconAsync()
     {
         var url = NormalizeUrl(_url.Text);
-        if (!Uri.TryCreate(url, UriKind.Absolute, out _))
+        if (url.Length == 0 && string.IsNullOrEmpty(Entry.IconSite))
         {
-            _iconStatus.Text = "сначала укажите адрес";
+            _iconStatus.Text = "нет ссылки, выберите файл";
             return;
         }
         _iconStatus.Text = "загружаю…";
-        var bmp = await FaviconFetcher.FetchAsync(url);
+        var bmp = await FaviconFetcher.FetchForAsync(url, Entry.IconSite);
         if (IsDisposed) { bmp?.Dispose(); return; }
         if (bmp == null)
         {
@@ -221,8 +267,16 @@ public class EditForm : Form
     string Apply()
     {
         var url = NormalizeUrl(_url.Text);
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var u) || (u.Scheme != "https" && u.Scheme != "http"))
-            return "Укажите адрес сайта, например https://www.chess.com/";
+        if (url.Length > 0 && !IsPath(url) && !Uri.TryCreate(url, UriKind.Absolute, out _))
+            return "Не понимаю ссылку. Пример: https://www.chess.com/ или steam://rungameid/730";
+        var name = _name.Text.Trim();
+        if (name.Length == 0 && IsWeb(url))
+        {
+            var host = new Uri(url).Host;
+            name = host.StartsWith("www.") ? host[4..] : host;
+        }
+        if (name.Length == 0 && IsPath(url)) name = Path.GetFileNameWithoutExtension(url);
+        if (name.Length == 0) return "Укажите название, например «Тренировка» или «Genshin Impact»";
 
         var times = _times.Text.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries).ToList();
         var parsed = new List<string>();
@@ -237,8 +291,6 @@ public class EditForm : Form
         var days = _days.Where(c => c.Checked).Select(c => (DayOfWeek)c.Tag).ToList();
         if (days.Count == 0) return "Отметьте хотя бы один день";
 
-        var name = _name.Text.Trim();
-        if (name.Length == 0) name = u.Host.StartsWith("www.") ? u.Host[4..] : u.Host;
 
         bool scheduleChanged = !Entry.Times.SequenceEqual(parsed) || !Entry.Days.OrderBy(d => d).SequenceEqual(days.OrderBy(d => d));
 

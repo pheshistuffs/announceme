@@ -56,6 +56,7 @@ public class TrayContext : ApplicationContext
         SystemEvents.TimeChanged += OnTimeChanged;
 
         Autostart.Refresh();
+        foreach (var site in Store.Data.Sites.ToList()) Notifier.Prepare(site);
         if (!startHidden) ShowMain();
         _ = CheckAsync();
     }
@@ -155,6 +156,11 @@ public class TrayContext : ApplicationContext
                 break;
             case "quick":
                 ShowQuick();
+                break;
+            case "open":
+                var id = System.Web.HttpUtility.ParseQueryString(u.Query)["id"];
+                var entry = Store.Data.Sites.FirstOrDefault(x => x.Id == id);
+                if (entry != null) Notifier.Launch(entry);
                 break;
             case "snooze":
                 var q = System.Web.HttpUtility.ParseQueryString(u.Query);

@@ -19,6 +19,27 @@ public class SiteEntry
     // so a new revision gets a fresh AppUserModelID.
     public int Rev { get; set; }
     public DateTime LastFiredUtc { get; set; } = DateTime.UtcNow;
+    // Start menu shortcut that carries the sender identity (see Notifier).
+    public string ShortcutFile { get; set; } = "";
+    public string ShortcutAumid { get; set; } = "";
+    // Set when the entry was added from a template (Templates.cs).
+    public string TemplateId { get; set; } = "";
+    // Page to take the icon from when the link itself doesn't give a good one.
+    public string IconSite { get; set; } = "";
+
+    public bool IsWebLink =>
+        Uri.TryCreate(Url, UriKind.Absolute, out var u) && (u.Scheme == "http" || u.Scheme == "https");
+
+    public string DisplayName
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(Name)) return Name;
+            if (IsWebLink) return Host;
+            if (!string.IsNullOrWhiteSpace(Url)) return Path.GetFileNameWithoutExtension(Url);
+            return "Напоминание";
+        }
+    }
 
     public SiteEntry Clone() => JsonSerializer.Deserialize<SiteEntry>(JsonSerializer.Serialize(this));
 
@@ -108,6 +129,7 @@ public static class Store
                 Name = "chess.com",
                 Text = "Обновились ежедневные задачи по шахматам",
                 Times = new() { "09:00" },
+                TemplateId = "chesscom",
             });
             Save();
         }
@@ -117,7 +139,9 @@ public static class Store
     // Icons left behind by edits that were cancelled or replaced.
     static void CleanupIcons()
     {
-        var used = Data.Sites.Select(s => s.IconFile).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var used = Data.Sites.Where(s => !string.IsNullOrEmpty(s.IconFile))
+            .SelectMany(s => new[] { s.IconFile, Path.ChangeExtension(s.IconFile, ".ico") })
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var f in Directory.GetFiles(IconsDir))
             if (!used.Contains(f))
                 try { File.Delete(f); } catch { }

@@ -27,7 +27,14 @@ public static class FaviconFetcher
     public static async Task EnsureIconAsync(SiteEntry e)
     {
         if (File.Exists(e.IconFile)) return;
-        var bmp = await FetchAsync(e.Url);
+        var bmp = await FetchForAsync(e.Url, e.IconSite);
+        if (bmp == null && string.IsNullOrWhiteSpace(e.Url) && string.IsNullOrWhiteSpace(e.IconSite))
+        {
+            // Nothing to take an icon from: use the app's bell.
+            using var s = typeof(FaviconFetcher).Assembly.GetManifestResourceStream("app.png");
+            using var img = Image.FromStream(s);
+            bmp = new Bitmap(img);
+        }
         if (bmp == null) return;
         using (bmp)
         {
@@ -59,6 +66,30 @@ public static class FaviconFetcher
         float w = img.Width * scale, h = img.Height * scale;
         g.DrawImage(img, (size - w) / 2, (size - h) / 2, w, h);
         return bmp;
+    }
+
+    // The icon for whatever an entry points to: the icon page, a web link, or a program on disk.
+    public static async Task<Bitmap> FetchForAsync(string url, string iconSite)
+    {
+        if (!string.IsNullOrWhiteSpace(iconSite)) return await FetchAsync(iconSite);
+        if (string.IsNullOrWhiteSpace(url)) return null;
+        if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            return await FetchAsync(url);
+        return FromFile(url);
+    }
+
+    public static Bitmap FromFile(string path)
+    {
+        try
+        {
+            if (!File.Exists(path)) return null;
+            using var icon = Icon.ExtractAssociatedIcon(path);
+            return icon?.ToBitmap();
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     // Tries the icons the page declares, the usual well-known paths and a favicon service,
