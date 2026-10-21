@@ -20,6 +20,7 @@ public class DashboardForm : Form, IMainView
     readonly Dictionary<string, Bitmap> _pendingIcons = new();
     readonly System.Windows.Forms.Timer _clock = new() { Interval = 30_000 };
     bool _ready;
+    readonly bool _glass;
 
     static readonly JsonSerializerOptions Json = new()
     {
@@ -36,9 +37,12 @@ public class DashboardForm : Form, IMainView
         AutoScaleMode = AutoScaleMode.Dpi;
         ClientSize = new Size(1200, 780);
         MinimumSize = new Size(980, 660);
-        BackColor = Color.FromArgb(236, 236, 236);
+        // On Windows 11 the frame between the cards is see-through (acrylic): the window is
+        // painted black, which DWM turns into glass once the frame is extended over it.
+        _glass = Environment.OSVersion.Version.Build >= 22621;
+        BackColor = _glass ? Color.Black : Color.FromArgb(22, 22, 22);
 
-        _web = new WebView2 { Dock = DockStyle.Fill, DefaultBackgroundColor = BackColor };
+        _web = new WebView2 { Dock = DockStyle.Fill, DefaultBackgroundColor = _glass ? Color.Transparent : BackColor };
         Controls.Add(_web);
 
         _clock.Tick += (_, _) => PushState();
@@ -51,10 +55,23 @@ public class DashboardForm : Form, IMainView
         // Dark title bar, to match the cards.
         int on = 1;
         DwmSetWindowAttribute(Handle, 20, ref on, sizeof(int));
+        if (_glass)
+        {
+            int acrylic = 3; // DWMWA_SYSTEMBACKDROP_TYPE = DWMSBT_TRANSIENTWINDOW
+            DwmSetWindowAttribute(Handle, 38, ref acrylic, sizeof(int));
+            var margins = new Margins { Left = -1, Right = -1, Top = -1, Bottom = -1 };
+            DwmExtendFrameIntoClientArea(Handle, ref margins);
+        }
     }
 
     [DllImport("dwmapi.dll")]
     static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+
+    [DllImport("dwmapi.dll")]
+    static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref Margins margins);
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct Margins { public int Left, Right, Top, Bottom; }
 
     async Task InitAsync()
     {
@@ -82,7 +99,7 @@ public class DashboardForm : Form, IMainView
             // Links in the page open in the browser, never inside the app.
             core.NewWindowRequested += (_, e) => { e.Handled = true; OpenExternal(e.Uri); };
             core.NavigationCompleted += (_, _) => { _ready = true; PushState(); };
-            core.Navigate($"https://{UiHost}/ui.html");
+            core.Navigate($"https://{UiHost}/ui.html{(_glass ? "?glass=1" : "")}");
             _clock.Start();
         }
         catch
