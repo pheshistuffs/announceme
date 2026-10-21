@@ -1,0 +1,761 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AnnounceMe</title>
+<style>
+  :root {
+    --frame: #ececec;
+    --card: #262626;
+    --card-2: #313131;
+    --card-3: #3a3a3a;
+    --line: #404040;
+    --pill: #dcdcdc;
+    --pill-text: #1d1d1d;
+    --text: #f1f1f1;
+    --muted: #9b9b9b;
+    --faint: #6d6d6d;
+    --danger: #ff8a7a;
+    --radius: 26px;
+    --gap: 12px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--frame);
+    color: var(--text);
+    font: 14px/1.4 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    overflow: hidden;
+    user-select: none;
+  }
+  button, input, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; border: 0; background: none; padding: 0; }
+  input, textarea { user-select: text; }
+  svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+  .app {
+    height: 100%;
+    padding: var(--gap);
+    display: grid;
+    gap: var(--gap);
+    grid-template-columns: 68px minmax(0, 1.25fr) minmax(0, 1fr) 320px;
+    grid-template-rows: minmax(0, 1fr) 236px;
+    grid-template-areas:
+      "side main main soon"
+      "side quick state today";
+  }
+  .card { background: var(--card); border-radius: var(--radius); min-height: 0; min-width: 0; }
+
+  /* Sidebar */
+  .side { grid-area: side; display: flex; flex-direction: column; align-items: center; padding: 14px 0; gap: 10px; }
+  .logo { width: 40px; height: 40px; border-radius: 50%; background: var(--pill); color: var(--pill-text); display: grid; place-items: center; }
+  .sep { width: 28px; height: 1px; background: var(--line); margin: 4px 0; }
+  .nav { width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; color: var(--muted); transition: background .15s, color .15s; position: relative; }
+  .nav:hover { background: var(--card-2); color: var(--text); }
+  .nav.active { background: var(--pill); color: var(--pill-text); }
+  .nav .tip { position: absolute; left: 52px; white-space: nowrap; background: #111; color: #fff; font-size: 12px; padding: 4px 10px; border-radius: 8px; opacity: 0; pointer-events: none; transition: opacity .15s; z-index: 5; }
+  .nav:hover .tip { opacity: 1; }
+  .side .grow { flex: 1; }
+  .nav.round { border-radius: 50%; }
+
+  /* Main */
+  .main { grid-area: main; display: flex; flex-direction: column; padding: 18px 18px 14px; }
+  .head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .title-pill { background: var(--pill); color: var(--pill-text); font-weight: 600; border-radius: 999px; padding: 6px 16px; }
+  .head .grow { flex: 1; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tab { border-radius: 999px; padding: 6px 14px; background: var(--card-2); color: var(--muted); }
+  .tab:hover { color: var(--text); }
+  .tab.active { background: var(--pill); color: var(--pill-text); }
+  .scroll { flex: 1; overflow-y: auto; min-height: 0; margin: 0 -6px; padding: 0 6px; }
+  .scroll::-webkit-scrollbar { width: 8px; }
+  .scroll::-webkit-scrollbar-thumb { background: var(--card-3); border-radius: 8px; }
+  .foot { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+  .foot .grow { flex: 1; }
+  .foot .grow ~ span { white-space: nowrap; }
+  .meter { width: 90px; height: 3px; border-radius: 2px; background: var(--line); overflow: hidden; }
+  .meter i { display: block; height: 100%; background: var(--pill); }
+  .muted { color: var(--muted); }
+  .faint { color: var(--faint); }
+  .small { font-size: 12px; }
+
+  .btn { border-radius: 999px; padding: 7px 16px; background: var(--pill); color: var(--pill-text); font-weight: 600; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .btn:hover { background: #fff; }
+  .btn.ghost { background: var(--card-2); color: var(--text); font-weight: 500; }
+  .btn.ghost:hover { background: var(--card-3); }
+  .btn svg { width: 16px; height: 16px; }
+  .icon-btn { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; color: var(--muted); }
+  .icon-btn:hover { background: var(--card-3); color: var(--text); }
+  .icon-btn.danger:hover { color: var(--danger); }
+  .icon-btn svg { width: 17px; height: 17px; }
+
+  /* Rows */
+  .row { display: flex; gap: 14px; align-items: flex-start; padding: 12px; border-radius: 18px; background: var(--card-2); margin-bottom: 8px; }
+  .row.off { opacity: .5; }
+  .ico { width: 44px; height: 44px; border-radius: 13px; background: var(--card-3); display: grid; place-items: center; overflow: hidden; flex: none; color: var(--muted); }
+  .ico img { width: 30px; height: 30px; object-fit: contain; }
+  .ico.round { border-radius: 50%; }
+  .row .body { flex: 1; min-width: 0; }
+  .row .name { font-weight: 600; font-size: 15px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .row .text { color: #d6d6d6; margin-top: 2px; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+  .row .meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .chip { font-size: 12px; border-radius: 999px; padding: 2px 10px; background: var(--card-3); color: var(--muted); }
+  .chip.light { background: var(--pill); color: var(--pill-text); }
+  .row .side-actions { display: flex; gap: 2px; align-items: center; }
+  .group-title { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; margin: 14px 4px 8px; }
+  .group-title:first-child { margin-top: 0; }
+  .empty { color: var(--muted); text-align: center; padding: 48px 12px; }
+  .empty b { color: var(--text); display: block; font-size: 16px; margin-bottom: 6px; }
+
+  /* Switch */
+  .switch { width: 42px; height: 24px; border-radius: 999px; background: var(--card-3); position: relative; flex: none; transition: background .15s; }
+  .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--faint); transition: transform .15s, background .15s; }
+  .switch.on { background: var(--pill); }
+  .switch.on::after { transform: translateX(18px); background: var(--card); }
+
+  /* Right column */
+  .soon { grid-area: soon; display: flex; flex-direction: column; padding: 18px; }
+  .soon-list { flex: 1; overflow-y: auto; min-height: 0; margin: 0 -4px; padding: 0 4px; }
+  .soon-item { display: flex; align-items: center; gap: 12px; padding: 8px 4px; }
+  .soon-item .ico { width: 40px; height: 40px; border-radius: 50%; }
+  .soon-item .ico img { width: 24px; height: 24px; }
+  .soon-item .t { flex: 1; min-width: 0; }
+  .soon-item .t b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .soon-item .t span { display: block; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .soon-item .when { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .soon-item.hero { background: var(--pill); color: var(--pill-text); border-radius: 999px; padding: 6px 16px 6px 6px; margin: 6px 0; }
+  .soon-item.hero .ico { background: var(--card); color: var(--text); width: 44px; height: 44px; }
+  .soon-item.hero .t span, .soon-item.hero .when { color: #555; }
+  .soon .btn { justify-content: center; margin-top: 10px; }
+
+  /* Bottom cards */
+  .mini { padding: 16px 18px; display: flex; flex-direction: column; }
+  .mini h3 { margin: 0; font-size: 14px; font-weight: 600; display: inline-block; background: var(--pill); color: var(--pill-text); border-radius: 999px; padding: 4px 14px; }
+  .mini .sub { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .mini .grow { flex: 1; }
+  .quick { grid-area: quick; }
+  .state { grid-area: state; }
+  .today { grid-area: today; }
+
+  .field { width: 100%; background: var(--card-2); border: 1px solid transparent; border-radius: 14px; padding: 10px 14px; outline: none; }
+  .field:focus { border-color: #666; }
+  .field::placeholder { color: var(--faint); }
+  textarea.field { resize: vertical; min-height: 70px; }
+  .quick .preview { font-size: 12px; margin-top: 8px; min-height: 18px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .quick .preview.ok { color: #bfe8c6; }
+  .presets { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .presets .btn { padding: 4px 12px; font-size: 12px; }
+  .bar { height: 3px; border-radius: 2px; background: var(--line); overflow: hidden; margin-top: 8px; }
+  .bar i { display: block; height: 100%; background: var(--pill); transition: width .5s; }
+  .bar-label { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--muted); margin-top: 10px; }
+  .bar-label span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .subcard { background: var(--card-2); border-radius: 18px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; margin-top: 10px; cursor: pointer; }
+  .subcard .t { flex: 1; min-width: 0; }
+  .subcard .t b { display: block; font-weight: 600; }
+  .subcard .t span { color: var(--muted); font-size: 12px; }
+  .state .btn { justify-content: center; margin-top: 10px; }
+
+  .today .top { display: flex; align-items: flex-start; gap: 8px; }
+  .today .top .grow { flex: 1; }
+  .today .tiny { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); cursor: pointer; }
+  .today .tiny .switch { transform: scale(.8); }
+  .timeline { position: relative; height: 36px; margin: 10px 4px 0; }
+  .timeline .dot { position: absolute; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: var(--faint); }
+  .timeline .dot.future { background: var(--pill); }
+  .timeline .now { position: absolute; top: 50%; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; background: var(--pill); box-shadow: 0 0 0 5px var(--card); }
+  .timeline .line { position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: var(--line); }
+  .hours { display: flex; justify-content: space-between; font-size: 11px; color: var(--faint); margin: 2px 0 0; }
+  .big-number { font-size: 30px; font-weight: 600; line-height: 1.1; margin-top: 10px; }
+
+  /* Templates, settings */
+  .tgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+  .tcard { background: var(--card-2); border-radius: 18px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; cursor: pointer; border: 1px solid transparent; }
+  .tcard:hover { border-color: var(--line); }
+  .tcard .top { display: flex; align-items: center; gap: 10px; }
+  .tcard .top b { flex: 1; font-weight: 600; }
+  .tcard .text { color: #d6d6d6; white-space: normal; }
+  .tcard.on { background: #3b3b3b; }
+  .setting { display: flex; align-items: center; gap: 14px; padding: 14px; border-radius: 18px; background: var(--card-2); margin-bottom: 8px; cursor: pointer; }
+  .setting .t { flex: 1; }
+  .setting .t b { display: block; font-weight: 600; }
+  .setting .t span { color: var(--muted); font-size: 13px; }
+  .hotkey { width: 180px; text-align: center; cursor: text; caret-color: transparent; }
+  .hotkey.listening { border-color: var(--pill); }
+
+  /* Editor */
+  .overlay { position: fixed; inset: 0; background: rgba(20,20,20,.55); display: none; align-items: center; justify-content: center; padding: 20px; z-index: 20; }
+  .overlay.open { display: flex; }
+  .dialog { background: var(--card); border-radius: 28px; width: min(640px, 100%); max-height: 100%; display: flex; flex-direction: column; box-shadow: 0 30px 80px rgba(0,0,0,.4); }
+  .dialog .dhead { display: flex; align-items: center; gap: 10px; padding: 18px 20px 6px; }
+  .dialog .dhead .grow { flex: 1; }
+  .dialog .dbody { overflow-y: auto; padding: 8px 20px 4px; }
+  .dialog .dfoot { display: flex; gap: 8px; padding: 14px 20px 18px; align-items: center; }
+  .dialog .dfoot .grow { flex: 1; }
+  .form-row { margin-bottom: 12px; }
+  .form-row > label { display: block; font-size: 12px; color: var(--muted); margin: 0 0 6px 4px; }
+  .inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .inline .field { flex: 1; min-width: 200px; }
+  .days { display: flex; gap: 6px; flex-wrap: wrap; }
+  .day { width: 44px; height: 36px; border-radius: 12px; background: var(--card-2); color: var(--muted); font-weight: 600; }
+  .day.on { background: var(--pill); color: var(--pill-text); }
+  .icon-preview { width: 56px; height: 56px; border-radius: 16px; background: var(--card-3); display: grid; place-items: center; overflow: hidden; }
+  .icon-preview img { width: 40px; height: 40px; object-fit: contain; }
+  .error { color: var(--danger); font-size: 13px; min-height: 18px; }
+
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); background: #111; color: #fff; padding: 10px 18px; border-radius: 999px; opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; z-index: 30; max-width: 80%; }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  @media (max-width: 1100px) {
+    .app { grid-template-columns: 68px minmax(0, 1fr) minmax(0, 1fr) 280px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="card side" id="side"></nav>
+  <section class="card main">
+    <div class="head" id="head"></div>
+    <div class="scroll" id="view"></div>
+    <div class="foot" id="foot"></div>
+  </section>
+  <aside class="card soon">
+    <div class="head" style="margin-bottom:6px"><span class="title-pill">Скоро</span></div>
+    <div class="soon-list" id="soon"></div>
+    <button class="btn" id="soonTest">Показать ближайшее сейчас</button>
+  </aside>
+  <section class="card mini quick" id="quickCard">
+    <div><h3>Быстрое напоминание</h3></div>
+    <div class="sub" id="quickSub"></div>
+    <input class="field" id="quickInput" style="margin-top:10px" placeholder="через 5 минут достать курицу из духовки" autocomplete="off">
+    <div class="preview" id="quickPreview"></div>
+    <div class="presets" id="quickPresets"></div>
+    <div class="grow"></div>
+    <div class="bar-label" id="quickBarLabel"></div>
+    <div class="bar"><i id="quickBar" style="width:0"></i></div>
+  </section>
+  <section class="card mini state" id="stateCard"></section>
+  <section class="card mini today" id="todayCard"></section>
+</div>
+
+<div class="overlay" id="editor">
+  <div class="dialog">
+    <div class="dhead"><span class="title-pill" id="edTitle">Новое напоминание</span><span class="grow"></span>
+      <button class="icon-btn" data-close title="Закрыть"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="dbody">
+      <div class="form-row"><label>Ссылка: сайт, steam://… или программа. Можно оставить пустой</label>
+        <div class="inline"><input class="field" id="edUrl" placeholder="https://www.chess.com/"><button class="btn ghost" id="edProgram">Программа…</button></div></div>
+      <div class="form-row"><label>Название (от кого придёт уведомление)</label><input class="field" id="edName" placeholder="chess.com, Genshin Impact, Тренировка…"></div>
+      <div class="form-row"><label>Заголовок, необязательно</label><input class="field" id="edHeading"></div>
+      <div class="form-row"><label>Текст</label><textarea class="field" id="edText" placeholder="Обновились ежедневные задачи по шахматам"></textarea></div>
+      <div class="form-row"><label>Иконка</label>
+        <div class="inline"><div class="icon-preview" id="edIcon"></div>
+          <button class="btn ghost" id="edFetch">Загрузить с сайта</button>
+          <button class="btn ghost" id="edPick">Выбрать файл…</button>
+          <span class="muted small" id="edIconStatus"></span></div></div>
+      <div class="form-row"><label>Дни</label>
+        <div class="days" id="edDays"></div>
+        <div class="presets" id="edPresets"></div></div>
+      <div class="form-row"><label>Время, можно несколько через запятую</label><input class="field" id="edTimes" placeholder="09:00, 18:30"></div>
+      <div class="setting" id="edEnabledRow" style="margin:0"><div class="t"><b>Включено</b></div><div class="switch on" id="edEnabled"></div></div>
+      <div class="error" id="edError" style="margin-top:10px"></div>
+    </div>
+    <div class="dfoot">
+      <button class="btn ghost" id="edPreview">Показать пример</button>
+      <span class="grow"></span>
+      <button class="btn ghost" data-close>Отмена</button>
+      <button class="btn" id="edSave">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+const ICONS = {
+  bell: '<path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
+  list: '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>',
+  bolt: '<path d="M13 3L5 14h6l-1 7 8-11h-6z"/>',
+  pad: '<rect x="2.5" y="7" width="19" height="11" rx="5"/><path d="M7 11v3M5.5 12.5h3"/><circle cx="15.5" cy="12" r=".8"/><circle cx="17.8" cy="14" r=".8"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  play: '<path d="M7 5l12 7-12 7z"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+  open: '<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  web: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.5 2.5 14.5 0 17M12 3.5c-2.5 2.5-2.5 14.5 0 17"/>',
+  user: '<circle cx="12" cy="9" r="3.5"/><path d="M5 20c1-4 4-5.5 7-5.5s6 1.5 7 5.5"/>',
+};
+const svg = (name, extra = "") => `<svg viewBox="0 0 24 24" ${extra}>${ICONS[name]}</svg>`;
+
+/* ---------- bridge ---------- */
+const host = window.chrome && window.chrome.webview;
+let seq = 0;
+const waiting = new Map();
+function call(cmd, args = {}) {
+  if (!host) return Mock.call(cmd, args);
+  return new Promise((resolve, reject) => {
+    const id = ++seq;
+    waiting.set(id, { resolve, reject });
+    host.postMessage({ id, cmd, args });
+  });
+}
+function onHostMessage(m) {
+  if (m.type === "state") { state = m.data; render(); }
+  else if (m.type === "reply") {
+    const w = waiting.get(m.id);
+    if (!w) return;
+    waiting.delete(m.id);
+    m.ok ? w.resolve(m.data) : w.reject(new Error(m.error));
+  }
+}
+if (host) host.addEventListener("message", e => onHostMessage(e.data));
+
+let toastTimer;
+function toast(text) {
+  const t = $("toast");
+  t.textContent = text;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2600);
+}
+async function run(cmd, args, okText) {
+  try {
+    const r = await call(cmd, args);
+    if (okText) toast(okText);
+    return r;
+  } catch (e) {
+    toast(e.message);
+    throw e;
+  }
+}
+
+/* ---------- state & rendering ---------- */
+let state = null;
+let view = "daily";
+let filter = "all";
+const DAY_NAMES = { 1: "Пн", 2: "Вт", 3: "Ср", 4: "Чт", 5: "Пт", 6: "Сб", 0: "Вс" };
+const WEEK = [1, 2, 3, 4, 5, 6, 0];
+
+function iconTile(item, cls = "") {
+  if (item.icon) return `<div class="ico ${cls}"><img src="${esc(item.icon)}" alt=""></div>`;
+  const glyph = item.kind === "game" ? "pad" : item.kind === "custom" ? "user" : item.kind === "reminder" ? "clock" : "web";
+  return `<div class="ico ${cls}">${svg(glyph)}</div>`;
+}
+
+function render() {
+  if (!state) return;
+  renderSide();
+  renderMain();
+  renderSoon();
+  renderQuickCard();
+  renderStateCard();
+  renderToday();
+}
+
+function renderSide() {
+  const items = [["daily", "list", "Ежедневные"], ["quick", "bolt", "Быстрые"], ["games", "pad", "Игры и шаблоны"]];
+  $("side").innerHTML =
+    `<div class="logo">${svg("bell")}</div><div class="sep"></div>` +
+    items.map(([v, i, t]) => `<button class="nav ${view === v ? "active" : ""}" data-view="${v}">${svg(i)}<span class="tip">${t}</span></button>`).join("") +
+    `<div class="grow"></div>` +
+    `<button class="nav round ${view === "settings" ? "active" : ""}" data-view="settings">${svg("gear")}<span class="tip">Настройки</span></button>`;
+}
+
+function renderMain() {
+  ({ daily: renderDaily, quick: renderQuickView, games: renderGames, settings: renderSettings })[view]();
+}
+
+function renderDaily() {
+  const tabs = [["all", "Все"], ["web", "Сайты"], ["game", "Игры"], ["custom", "Свои"]];
+  $("head").innerHTML =
+    `<span class="title-pill">Ежедневные</span><span class="grow"></span>` +
+    `<div class="tabs">${tabs.map(([k, t]) => `<button class="tab ${filter === k ? "active" : ""}" data-filter="${k}">${t}</button>`).join("")}</div>`;
+  const list = state.sites.filter(s => filter === "all" || s.kind === filter);
+  $("view").innerHTML = list.length ? list.map(siteRow).join("") :
+    `<div class="empty"><b>Здесь пока пусто</b>Добавьте своё напоминание или включите игры в разделе «Игры и шаблоны».</div>`;
+  const on = state.sites.filter(s => s.enabled).length;
+  $("foot").innerHTML =
+    `<button class="btn" data-action="add">${svg("plus")}Добавить</button>` +
+    `<button class="btn ghost" data-view="games">${svg("pad")}Игры и шаблоны</button>` +
+    `<span class="grow"></span><span class="muted small">включено ${on} из ${state.sites.length}</span>` +
+    `<div class="meter"><i style="width:${state.sites.length ? on / state.sites.length * 100 : 0}%"></i></div>`;
+}
+
+function siteRow(s) {
+  const heading = s.title ? `<div class="text"><b>${esc(s.title)}</b></div>` : "";
+  return `<div class="row ${s.enabled ? "" : "off"}" data-id="${esc(s.id)}">
+    ${iconTile(s)}
+    <div class="body">
+      <div class="name">${esc(s.name)}</div>
+      ${heading}
+      <div class="text">${esc(s.text || "Без текста")}</div>
+      <div class="meta"><span class="chip">${esc(s.schedule)}</span>${s.nextText ? `<span class="chip light">${esc(s.nextText)}</span>` : ""}</div>
+    </div>
+    <div class="side-actions">
+      <button class="icon-btn" title="Показать сейчас" data-action="test">${svg("play")}</button>
+      ${s.url ? `<button class="icon-btn" title="Открыть" data-action="open">${svg("open")}</button>` : ""}
+      <button class="icon-btn" title="Изменить" data-action="edit">${svg("edit")}</button>
+      <button class="icon-btn danger" title="Удалить" data-action="delete">${svg("trash")}</button>
+      <div class="switch ${s.enabled ? "on" : ""}" data-action="toggle" title="${s.enabled ? "Выключить" : "Включить"}" style="margin-left:6px"></div>
+    </div>
+  </div>`;
+}
+
+function renderQuickView() {
+  $("head").innerHTML = `<span class="title-pill">Быстрые напоминания</span><span class="grow"></span><span class="muted small">${esc(hotkeyHint())}</span>`;
+  const rows = state.reminders.map(r => `<div class="row" data-rid="${esc(r.id)}">
+      <div class="ico round">${svg("clock")}</div>
+      <div class="body"><div class="name">${esc(r.text)}</div><div class="meta"><span class="chip light">${esc(r.inText)}</span></div></div>
+      <div class="side-actions"><button class="icon-btn danger" title="Удалить" data-action="delete-reminder">${svg("trash")}</button></div>
+    </div>`).join("");
+  $("view").innerHTML = rows ||
+    `<div class="empty"><b>Нет быстрых напоминаний</b>Напишите в карточке снизу «через 5 минут достать курицу» и нажмите Enter.</div>`;
+  $("foot").innerHTML = `<span class="muted small">Уведомление висит на экране, пока его не закроют; кнопки «Ещё 5 мин» и «Ещё 15 мин» его откладывают.</span>`;
+}
+
+function renderGames() {
+  $("head").innerHTML = `<span class="title-pill">Игры и шаблоны</span><span class="grow"></span><span class="muted small">Время сброса — для европейских серверов</span>`;
+  const groups = [...new Set(state.templates.map(t => t.group))];
+  $("view").innerHTML = groups.map(g => `<div class="group-title">${esc(g)}</div><div class="tgrid">` +
+    state.templates.filter(t => t.group === g).map(t => `<div class="tcard ${t.on ? "on" : ""}" data-tid="${esc(t.id)}">
+      <div class="top"><b>${esc(t.name)}</b><div class="switch ${t.on ? "on" : ""}"></div></div>
+      <div class="text">${esc(t.text)}</div>
+      <div><span class="chip">${esc(t.when)}</span></div>
+    </div>`).join("") + `</div>`).join("");
+  const on = state.templates.filter(t => t.on).length;
+  $("foot").innerHTML = `<span class="muted small">Включённые появляются в «Ежедневных», там можно поменять время и текст. Выключите, и напоминание удалится.</span><span class="grow"></span><span class="muted small">${on} включено</span>`;
+}
+
+function renderSettings() {
+  const st = state.settings;
+  $("head").innerHTML = `<span class="title-pill">Настройки</span>`;
+  const sw = (key, title, sub) => `<div class="setting" data-setting="${key}"><div class="t"><b>${title}</b><span>${sub}</span></div><div class="switch ${st[key] ? "on" : ""}"></div></div>`;
+  $("view").innerHTML =
+    sw("paused", "Пауза ежедневных", "Ежедневные напоминания не приходят, быстрые приходят") +
+    sw("autostart", "Запускать вместе с Windows", "Приложение тихо стартует в трее") +
+    sw("catchUp", "Показывать пропущенные", "Если компьютер был выключен в нужное время, уведомление придёт после включения (до 12 часов)") +
+    `<div class="setting" style="cursor:default"><div class="t"><b>Горячая клавиша быстрого напоминания</b><span>Нажмите в поле нужное сочетание с Ctrl или Alt. Backspace выключает.</span></div>
+      <input class="field hotkey" id="hotkey" readonly value="${esc(st.hotkey)}" placeholder="выключена"></div>` +
+    `<div class="setting" data-action="classic"><div class="t"><b>Классический вид</b><span>Простые окна Windows вместо этого дизайна (до перезапуска)</span></div>${svg("open")}</div>`;
+  $("foot").innerHTML = `<span class="muted small">Настройки и иконки хранятся в %APPDATA%\\AnnounceMe</span>`;
+}
+
+function upcoming() {
+  const items = [];
+  for (const s of state.sites) if (s.next) items.push({ kind: s.kind, id: s.id, icon: s.icon, name: s.name, text: s.text, at: new Date(s.next), when: s.nextText });
+  for (const r of state.reminders) items.push({ kind: "reminder", rid: r.id, name: r.text, text: "Быстрое напоминание", at: new Date(r.at), when: r.whenText });
+  return items.sort((a, b) => a.at - b.at);
+}
+
+function renderSoon() {
+  const items = upcoming().slice(0, 7);
+  $("soon").innerHTML = items.length ? items.map((it, i) => `<div class="soon-item ${i === 0 ? "hero" : ""}">
+      ${iconTile(it)}<div class="t"><b>${esc(it.name)}</b><span>${esc(it.text)}</span></div>
+      <span class="when">${esc(i === 0 ? countdown(it.at) : it.when)}</span></div>`).join("") :
+    `<div class="empty" style="padding:24px 8px">Ничего не запланировано</div>`;
+  $("soonTest").style.display = items.some(i => i.id) ? "" : "none";
+}
+
+function countdown(at) {
+  const ms = at - Date.now();
+  if (ms < 60000) return "меньше минуты";
+  const m = Math.round(ms / 60000);
+  if (m < 60) return `через ${m} мин`;
+  const h = Math.floor(m / 60), mm = m % 60;
+  if (h < 24) return `через ${h} ч${mm ? ` ${mm} мин` : ""}`;
+  return at.toLocaleDateString("ru-RU", { weekday: "short", day: "numeric", month: "short" }) + ", " + at.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+}
+
+function hotkeyHint() {
+  return state.settings.hotkey ? `Вызов из любого окна: ${state.settings.hotkey}` : "Горячая клавиша выключена";
+}
+
+const PRESETS = [5, 10, 15, 30, 60];
+function renderQuickCard() {
+  $("quickSub").textContent = hotkeyHint();
+  if (!$("quickPresets").childElementCount)
+    $("quickPresets").innerHTML = PRESETS.map(m => `<button class="btn ghost" data-minutes="${m}">+${m < 60 ? m + " мин" : "1 час"}</button>`).join("");
+  const next = state.reminders[0];
+  if (next) {
+    const at = new Date(next.at), created = new Date(next.created);
+    const total = Math.max(1, at - created), done = Math.min(1, Math.max(0, (Date.now() - created) / total));
+    $("quickBarLabel").innerHTML = `<span>${esc(next.text)}</span><span>${esc(countdown(at))}</span>`;
+    $("quickBar").style.width = (done * 100).toFixed(1) + "%";
+  } else {
+    $("quickBarLabel").innerHTML = `<span>Нет запущенных напоминаний</span><span></span>`;
+    $("quickBar").style.width = "0";
+  }
+}
+
+function renderStateCard() {
+  const st = state.settings;
+  const on = state.sites.filter(s => s.enabled).length;
+  $("stateCard").innerHTML = `<div><h3>Уведомления</h3></div>
+    <div class="sub">${st.paused ? "Ежедневные на паузе" : `Работают: ${on} ежедневных, ${state.reminders.length} быстрых`}</div>
+    <div class="grow"></div>
+    <div class="subcard" data-setting="paused"><div class="t"><b>Пауза</b><span>${st.paused ? "включена" : "выключена"}</span></div><div class="switch ${st.paused ? "on" : ""}"></div></div>
+    <button class="btn" data-view="games">${svg("pad")}Игры и шаблоны</button>`;
+}
+
+function renderToday() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dayMs = 86400000;
+  const today = [];
+  if (!state.settings.paused)
+    for (const s of state.sites) {
+      if (!s.enabled || !s.days.includes(now.getDay())) continue;
+      for (const t of s.times) {
+        const [h, m] = t.split(":").map(Number);
+        today.push(new Date(start.getTime() + (h * 60 + m) * 60000));
+      }
+    }
+  for (const r of state.reminders) { const at = new Date(r.at); if (at - start < dayMs) today.push(at); }
+  const left = today.filter(t => t > now).length;
+  const pos = d => ((d - start) / dayMs * 100).toFixed(2) + "%";
+  $("todayCard").innerHTML = `<div class="top"><div class="grow"><h3>Сегодня</h3></div>
+      <div class="tiny" data-setting="autostart">автозапуск<div class="switch ${state.settings.autostart ? "on" : ""}"></div></div></div>
+    <div class="big-number">${left}</div>
+    <div class="sub" style="margin-top:0">${left === 0 ? "больше напоминаний сегодня нет" : plural(left, "напоминание", "напоминания", "напоминаний") + " впереди"}</div>
+    <div class="grow"></div>
+    <div class="timeline"><div class="line"></div>
+      ${today.map(d => `<div class="dot ${d > now ? "future" : ""}" style="left:${pos(d)}" title="${d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}"></div>`).join("")}
+      <div class="now" style="left:${pos(now)}" title="сейчас"></div></div>
+    <div class="hours"><span>0:00</span><span>6:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>
+    <div class="bar"><i style="width:${pos(now)}"></i></div>`;
+}
+
+function plural(n, one, few, many) {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
+  return many;
+}
+
+/* ---------- interactions ---------- */
+document.addEventListener("click", async e => {
+  const el = e.target.closest("[data-view],[data-filter],[data-action],[data-setting],[data-tid],[data-minutes],[data-close]");
+  if (!el) return;
+  if (el.dataset.close !== undefined) return closeEditor();
+  if (el.dataset.view) { view = el.dataset.view; render(); $("view").scrollTop = 0; return; }
+  if (el.dataset.filter) { filter = el.dataset.filter; render(); return; }
+  if (el.dataset.minutes) { await addQuick(+el.dataset.minutes); return; }
+  if (el.dataset.setting) {
+    const key = el.dataset.setting;
+    const cmd = { paused: "setPaused", autostart: "setAutostart", catchUp: "setCatchUp" }[key];
+    await run(cmd, { value: !state.settings[key] });
+    return;
+  }
+  if (el.dataset.tid) {
+    const t = state.templates.find(x => x.id === el.dataset.tid);
+    await run("setTemplate", { id: t.id, on: !t.on }, t.on ? `${t.name} убран` : `${t.name} добавлен`);
+    return;
+  }
+  const action = el.dataset.action;
+  const row = el.closest("[data-id]");
+  const id = row && row.dataset.id;
+  const site = id && state.sites.find(s => s.id === id);
+  switch (action) {
+    case "add": openEditor(null); break;
+    case "edit": openEditor(site); break;
+    case "test": await run("testSite", { id }); break;
+    case "open": await run("openSite", { id }); break;
+    case "toggle": await run("toggleSite", { id, enabled: !site.enabled }); break;
+    case "delete":
+      if (row.dataset.confirm) await run("deleteSite", { id }, `${site.name} удалено`);
+      else { row.dataset.confirm = "1"; el.style.color = "var(--danger)"; el.title = "Нажмите ещё раз, чтобы удалить"; toast("Нажмите ещё раз, чтобы удалить"); setTimeout(() => { delete row.dataset.confirm; el.style.color = ""; }, 3000); }
+      break;
+    case "delete-reminder": await run("deleteReminder", { id: el.closest("[data-rid]").dataset.rid }); break;
+    case "classic": await run("classic"); break;
+  }
+});
+
+$("soonTest").addEventListener("click", () => {
+  const first = upcoming().find(i => i.id);
+  if (first) run("testSite", { id: first.id });
+});
+
+/* quick reminder card */
+let parseTimer;
+$("quickInput").addEventListener("input", () => {
+  clearTimeout(parseTimer);
+  parseTimer = setTimeout(updateQuickPreview, 120);
+});
+$("quickInput").addEventListener("keydown", async e => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    try {
+      await run("addQuick", { text: $("quickInput").value }, "Напоминание поставлено");
+      $("quickInput").value = "";
+      updateQuickPreview();
+    } catch { }
+  } else if (e.key === "Escape") { $("quickInput").value = ""; updateQuickPreview(); }
+});
+async function updateQuickPreview() {
+  const text = $("quickInput").value;
+  const p = $("quickPreview");
+  if (!text.trim()) { p.className = "preview"; p.textContent = "Enter — поставить. Можно: «в 18:30 позвонить маме», «10м чай»"; return; }
+  const r = await call("parseQuick", { text }).catch(() => null);
+  if (r) { p.className = "preview ok"; p.textContent = `Напомню ${r.when}: ${r.text}`; }
+  else { p.className = "preview"; p.textContent = "Не вижу, когда напомнить: добавьте «через 10 минут» или нажмите кнопку"; }
+}
+async function addQuick(minutes) {
+  await run("addQuick", { text: $("quickInput").value, minutes }, "Напоминание поставлено");
+  $("quickInput").value = "";
+  updateQuickPreview();
+}
+
+/* hotkey capture */
+document.addEventListener("keydown", async e => {
+  if (e.target.id !== "hotkey") return;
+  e.preventDefault();
+  if (["Control", "Alt", "Shift", "Meta"].includes(e.key)) return;
+  let value;
+  if ((e.key === "Backspace" || e.key === "Delete") && !e.ctrlKey && !e.altKey) value = "";
+  else {
+    if (!e.ctrlKey && !e.altKey) { toast("Нужен Ctrl или Alt"); return; }
+    let key = e.code.startsWith("Key") ? e.code.slice(3) : e.code.startsWith("Digit") ? e.code.slice(5) : e.code;
+    value = [e.ctrlKey && "Ctrl", e.altKey && "Alt", e.shiftKey && "Shift", key].filter(Boolean).join("+");
+  }
+  e.target.value = value;
+  try { await run("setHotkey", { value }, value ? `Горячая клавиша: ${value}` : "Горячая клавиша выключена"); } catch { }
+});
+
+/* ---------- editor ---------- */
+let editing = null, iconToken = "";
+function openEditor(site) {
+  editing = site;
+  iconToken = "";
+  $("edTitle").textContent = site ? site.name : "Новое напоминание";
+  $("edUrl").value = site ? site.url : "";
+  $("edName").value = site ? site.rawName : "";
+  $("edHeading").value = site ? site.title : "";
+  $("edText").value = site ? site.text : "";
+  $("edTimes").value = site ? site.times.join(", ") : "09:00";
+  setEditorDays(site ? site.days : WEEK);
+  $("edEnabled").classList.toggle("on", site ? site.enabled : true);
+  setEditorIcon(site && site.icon ? `<img src="${esc(site.icon)}" alt="">` : svg("web"));
+  $("edIconStatus").textContent = "";
+  $("edError").textContent = "";
+  $("editor").classList.add("open");
+  setTimeout(() => (site ? $("edText") : $("edUrl")).focus(), 30);
+}
+function closeEditor() { $("editor").classList.remove("open"); editing = null; }
+function setEditorIcon(html) { $("edIcon").innerHTML = html; }
+function setEditorDays(days) {
+  $("edDays").innerHTML = WEEK.map(d => `<button class="day ${days.includes(d) ? "on" : ""}" data-day="${d}">${DAY_NAMES[d]}</button>`).join("");
+}
+$("edDays").addEventListener("click", e => { const b = e.target.closest("[data-day]"); if (b) b.classList.toggle("on"); });
+$("edPresets").innerHTML = [["каждый день", WEEK], ["будни", [1, 2, 3, 4, 5]], ["выходные", [6, 0]]]
+  .map(([t, d]) => `<button class="btn ghost" data-days="${d.join(",")}">${t}</button>`).join("");
+$("edPresets").addEventListener("click", e => {
+  const b = e.target.closest("[data-days]");
+  if (b) setEditorDays(b.dataset.days.split(",").map(Number));
+});
+$("edEnabledRow").addEventListener("click", () => $("edEnabled").classList.toggle("on"));
+$("editor").addEventListener("mousedown", e => { if (e.target.id === "editor") closeEditor(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && $("editor").classList.contains("open")) closeEditor(); });
+
+function editorArgs() {
+  return {
+    id: editing ? editing.id : "",
+    url: $("edUrl").value,
+    name: $("edName").value,
+    title: $("edHeading").value,
+    text: $("edText").value,
+    times: $("edTimes").value,
+    days: [...$("edDays").querySelectorAll(".day.on")].map(b => +b.dataset.day),
+    enabled: $("edEnabled").classList.contains("on"),
+    iconToken,
+  };
+}
+function looksWeb(u) { u = u.trim(); return u && !/^[a-z]:|^\\\\/i.test(u) && (!u.includes("://") || /^https?:\/\//i.test(u)); }
+$("edUrl").addEventListener("change", async () => {
+  const u = $("edUrl").value.trim();
+  if (!$("edName").value.trim() && looksWeb(u)) {
+    try { $("edName").value = new URL(u.includes("://") ? u : "https://" + u).hostname.replace(/^www\./, ""); } catch { }
+  }
+  if (!iconToken && !(editing && editing.icon) && looksWeb(u)) fetchIcon();
+});
+async function fetchIcon() {
+  $("edIconStatus").textContent = "загружаю…";
+  try {
+    const r = await call("fetchIcon", { url: $("edUrl").value, id: editing ? editing.id : "" });
+    applyIcon(r);
+  } catch (e) { $("edIconStatus").textContent = e.message; }
+}
+function applyIcon(r) {
+  if (!r) return;
+  iconToken = r.token;
+  setEditorIcon(`<img src="${r.dataUrl}" alt="">`);
+  $("edIconStatus").textContent = r.size || "";
+}
+$("edFetch").addEventListener("click", fetchIcon);
+$("edPick").addEventListener("click", async () => { try { applyIcon(await call("pickIcon")); } catch (e) { $("edIconStatus").textContent = e.message; } });
+$("edProgram").addEventListener("click", async () => {
+  const r = await call("pickProgram").catch(e => { toast(e.message); return null; });
+  if (!r) return;
+  $("edUrl").value = r.path;
+  if (!$("edName").value.trim()) $("edName").value = r.name;
+  if (r.icon) applyIcon(r.icon);
+});
+$("edSave").addEventListener("click", async () => {
+  try {
+    await call("saveSite", editorArgs());
+    closeEditor();
+    toast("Сохранено");
+  } catch (e) { $("edError").textContent = e.message; }
+});
+$("edPreview").addEventListener("click", async () => {
+  $("edError").textContent = "";
+  try { await call("previewSite", editorArgs()); } catch (e) { $("edError").textContent = e.message; }
+});
+
+setInterval(() => { if (state) { renderSoon(); renderQuickCard(); renderToday(); } }, 15000);
+
+/* ---------- preview outside the app (browser) ---------- */
+const Mock = {
+  call(cmd, args) {
+    if (cmd === "parseQuick") return Promise.resolve(/через|в \d/.test(args.text) ? { when: "сегодня в 12:05 (через 5 мин)", text: "Достать курицу" } : null);
+    return Promise.resolve(null);
+  },
+};
+if (!host) {
+  const now = new Date();
+  const at = (h, m, addDay = 0) => { const d = new Date(now); d.setDate(d.getDate() + addDay); d.setHours(h, m, 0, 0); return d.toISOString(); };
+  const icon = c => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='${c}'/></svg>`)}`;
+  state = {
+    now: now.toISOString(),
+    settings: { paused: false, autostart: true, catchUp: true, hotkey: "Ctrl+Alt+N" },
+    sites: [
+      { id: "a", name: "chess.com", rawName: "chess.com", title: "", text: "Обновились ежедневные задачи по шахматам", url: "https://www.chess.com/", icon: icon("#7fa650"), enabled: true, days: WEEK, times: ["09:00"], schedule: "каждый день, 09:00", kind: "web", next: at(9, 0, 1), nextText: "завтра 09:00" },
+      { id: "b", name: "Genshin Impact", rawName: "Genshin Impact", title: "", text: "Поручения обновились: сделай дейлики, потрать смолу и отметься в HoYoLAB", url: "https://act.hoyolab.com/", icon: icon("#e8c37a"), enabled: true, days: WEEK, times: ["10:00"], schedule: "каждый день, 10:00", kind: "game", next: at(10, 0, 1), nextText: "завтра 10:00" },
+      { id: "c", name: "Перерыв", rawName: "Перерыв", title: "", text: "Встань, разомнись и выпей воды", url: "", icon: null, enabled: true, days: WEEK, times: ["15:00"], schedule: "каждый день, 15:00", kind: "custom", next: at(15, 0), nextText: "сегодня 15:00" },
+      { id: "d", name: "Duolingo", rawName: "Duolingo", title: "", text: "Один урок, чтобы не потерять ударный режим", url: "https://www.duolingo.com/", icon: icon("#58cc02"), enabled: false, days: [6, 0], times: ["20:00"], schedule: "Сб, Вс, 20:00", kind: "web", next: null, nextText: null },
+    ],
+    reminders: [{ id: "r1", text: "Достать курицу из духовки", at: new Date(Date.now() + 4 * 60000).toISOString(), created: new Date(Date.now() - 60000).toISOString(), whenText: "через 4 мин", inText: "через 4 мин" }],
+    templates: [
+      { id: "genshin", group: "Гача-игры", name: "Genshin Impact", text: "Поручения обновились: сделай дейлики, потрать смолу и отметься в HoYoLAB", when: "каждый день, 10:00 (сброс в 06:00)", on: true },
+      { id: "hsr", group: "Гача-игры", name: "Honkai: Star Rail", text: "Ежедневная тренировка обновилась: потрать энергию освоения и отметься в HoYoLAB", when: "каждый день, 10:00 (сброс в 06:00)", on: false },
+      { id: "epic", group: "Другие игры", name: "Epic Games Store", text: "Новая бесплатная игра недели — забери её", when: "Чт, 19:05 (сброс в 19:05)", on: false },
+      { id: "water", group: "Сайты и привычки", name: "Перерыв", text: "Встань, разомнись и выпей воды", when: "каждый день, 15:00", on: true },
+    ],
+  };
+  const q = new URLSearchParams(location.search);
+  if (q.get("view")) view = q.get("view");
+  render();
+  if (q.get("editor")) openEditor(state.sites[0]);
+} else {
+  call("getState").then(s => { state = s; render(); });
+}
+updateQuickPreview();
+</script>
+</body>
+</html>

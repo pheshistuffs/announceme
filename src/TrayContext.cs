@@ -9,7 +9,8 @@ public class TrayContext : ApplicationContext
     readonly ToolStripMenuItem _pauseItem, _quickItem;
     readonly Control _invoker = new();
     readonly GlobalHotkey _hotkey = new();
-    MainForm _main;
+    Form _main;
+    bool _classicUi;
     QuickForm _quick;
     bool _checking;
 
@@ -89,7 +90,7 @@ public class TrayContext : ApplicationContext
                 foreach (var r in dueReminders) Store.Data.Reminders.Remove(r);
                 Store.Save();
                 foreach (var r in dueReminders) ShowReminder(r);
-                _main?.RefreshReminders();
+                RefreshMain();
             }
 
             if (Store.Data.Paused) return;
@@ -128,7 +129,7 @@ public class TrayContext : ApplicationContext
         {
             _tray.ShowBalloonTip(5000, "Не удалось показать уведомление", $"{e.Name}: {ex.Message}", ToolTipIcon.Error);
         }
-        _main?.RefreshList();
+        RefreshMain();
     }
 
     public void AddReminder(DateTime atLocal, string text)
@@ -136,7 +137,7 @@ public class TrayContext : ApplicationContext
         Store.Data.Reminders.Add(new Reminder { AtUtc = atLocal.ToUniversalTime(), Text = text });
         Store.Data.Reminders.Sort((a, b) => a.AtUtc.CompareTo(b.AtUtc));
         Store.Save();
-        _main?.RefreshReminders();
+        RefreshMain();
     }
 
     // Commands from a second launch of the exe or from notification buttons (announceme:...).
@@ -180,11 +181,38 @@ public class TrayContext : ApplicationContext
         _quick.ShowAndFocus();
     }
 
-    void ShowMain()
+    void RefreshMain()
+    {
+        if (_main is IMainView v && !_main.IsDisposed) v.RefreshAll();
+    }
+
+    static bool WebViewAvailable()
+    {
+        try
+        {
+            return !string.IsNullOrEmpty(Microsoft.Web.WebView2.Core.CoreWebView2Environment.GetAvailableBrowserVersionString());
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    // Used when the new window can't start: shows the plain one instead.
+    public void FallbackToClassic()
+    {
+        _classicUi = true;
+        var old = _main;
+        _main = null;
+        old?.Dispose();
+        ShowMain();
+    }
+
+    public void ShowMain()
     {
         if (_main == null || _main.IsDisposed)
         {
-            _main = new MainForm(this);
+            _main = !_classicUi && WebViewAvailable() ? new DashboardForm(this) : new MainForm(this);
             _main.FormClosing += (_, e) =>
             {
                 if (e.CloseReason != CloseReason.UserClosing) return;
@@ -205,9 +233,12 @@ public class TrayContext : ApplicationContext
         _main.Activate();
     }
 
-    void TogglePause()
+    void TogglePause() => SetPaused(!Store.Data.Paused);
+
+    public void SetPaused(bool paused)
     {
-        Store.Data.Paused = !Store.Data.Paused;
+        if (paused == Store.Data.Paused) return;
+        Store.Data.Paused = paused;
         _pauseItem.Checked = Store.Data.Paused;
         if (!Store.Data.Paused)
         {
@@ -215,7 +246,7 @@ public class TrayContext : ApplicationContext
             foreach (var s in Store.Data.Sites) s.LastFiredUtc = DateTime.UtcNow;
         }
         Store.Save();
-        _main?.RefreshList();
+        RefreshMain();
     }
 
     void Exit()

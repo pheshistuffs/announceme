@@ -76,6 +76,7 @@ public class Reminder
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N")[..12];
     public DateTime AtUtc { get; set; }
+    public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
     public string Text { get; set; } = "";
 }
 

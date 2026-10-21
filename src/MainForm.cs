@@ -1,6 +1,6 @@
 namespace AnnounceMe;
 
-public class MainForm : Form
+public class MainForm : Form, IMainView
 {
     readonly TrayContext _ctx;
     readonly ListView _list;
@@ -157,6 +157,12 @@ public class MainForm : Form
         row.Controls.AddRange(new Control[] { box, reset, status });
         Apply(Store.Data.QuickHotkey);
         return row;
+    }
+
+    public void RefreshAll()
+    {
+        RefreshList();
+        RefreshReminders();
     }
 
     public void RefreshReminders()
