@@ -145,6 +145,12 @@
   .field:focus { border-color: #666; }
   .field::placeholder { color: var(--faint); }
   textarea.field { resize: vertical; min-height: 70px; }
+  .quick-row { display: flex; gap: 8px; margin-top: 10px; }
+  .quick-row .field { flex: 1; min-width: 0; }
+  .mic { width: 44px; height: 44px; border-radius: 50%; background: var(--pill); color: var(--pill-text); display: grid; place-items: center; flex: none; }
+  .mic svg { width: 20px; height: 20px; }
+  .android-only { display: none !important; }
+  html.android .android-only { display: grid !important; }
   .quick .preview { font-size: 12px; margin-top: 8px; min-height: 18px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .quick .preview.ok { color: #bfe8c6; }
   .presets { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
@@ -269,7 +275,10 @@
   <section class="card mini quick" id="quickCard">
     <div><h3>Быстрое напоминание</h3></div>
     <div class="sub" id="quickSub"></div>
-    <input class="field" id="quickInput" style="margin-top:10px" placeholder="через 5 минут достать курицу из духовки" autocomplete="off">
+    <div class="quick-row">
+      <input class="field" id="quickInput" placeholder="через 5 минут достать курицу из духовки" autocomplete="off">
+      <button class="mic android-only" id="quickMic" title="Сказать голосом"></button>
+    </div>
     <div class="preview" id="quickPreview"></div>
     <div class="presets" id="quickPresets"></div>
     <div class="grow"></div>
@@ -332,6 +341,7 @@ const ICONS = {
   open: '<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
   clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
   web: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.5 2.5 14.5 0 17M12 3.5c-2.5 2.5-2.5 14.5 0 17"/>',
+  mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>',
   user: '<circle cx="12" cy="9" r="3.5"/><path d="M5 20c1-4 4-5.5 7-5.5s6 1.5 7 5.5"/>',
 };
 const svg = (name, extra = "") => `<svg viewBox="0 0 24 24" ${extra}>${ICONS[name]}</svg>`;
@@ -357,6 +367,7 @@ function call(cmd, args = {}) {
 }
 function onHostMessage(m) {
   if (m.type === "state") { state = m.data; render(); }
+  else if (m.type === "toast") toast(m.text);
   else if (m.type === "reply") {
     const w = waiting.get(m.id);
     if (!w) return;
@@ -644,6 +655,14 @@ $("soonTest").addEventListener("click", () => {
 });
 
 /* quick reminder card */
+$("quickMic").innerHTML = svg("mic");
+$("quickMic").addEventListener("click", () => run("voice"));
+window.setQuickText = text => {
+  $("quickInput").value = text;
+  updateQuickPreview();
+  $("quickInput").scrollIntoView({ behavior: "smooth", block: "center" });
+  $("quickInput").focus();
+};
 let parseTimer;
 $("quickInput").addEventListener("input", () => {
   clearTimeout(parseTimer);

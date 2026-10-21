@@ -26,8 +26,13 @@ import kotlin.concurrent.thread
 class MainActivity : Activity() {
     companion object {
         @Volatile var current: MainActivity? = null
+        const val EXTRA_QUICK_TEXT = "quickText"
         private const val PICK_ICON = 1
+        private const val VOICE = 2
     }
+
+    private var pageReady = false
+    private var quickText: String? = null
 
     private lateinit var web: WebView
     private val pendingIcons = HashMap<String, Bitmap>()
@@ -52,14 +57,33 @@ class MainActivity : Activity() {
                     openUri(request.url.toString())
                     return true
                 }
+
+                override fun onPageFinished(view: WebView, url: String) {
+                    pageReady = true
+                    deliverQuickText()
+                }
             }
             loadUrl("file:///android_asset/ui.html")
         }
         setContentView(web)
+        quickText = intent.getStringExtra(EXTRA_QUICK_TEXT)
 
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 0)
         Store.worker.execute { Alarms.check(this) }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        intent.getStringExtra(EXTRA_QUICK_TEXT)?.let { quickText = it; deliverQuickText() }
+    }
+
+    // Puts heard words into the quick reminder field, so the time can be added by hand.
+    private fun deliverQuickText() {
+        val text = quickText ?: return
+        if (!pageReady) return
+        quickText = null
+        web.evaluateJavascript("window.setQuickText && window.setQuickText(${JSONObject.quote(text)})", null)
     }
 
     override fun onResume() {
@@ -326,6 +350,17 @@ class MainActivity : Activity() {
                 return null
             }
 
+            "voice" -> {
+                runOnUiThread {
+                    try {
+                        startActivityForResult(Quick.speechIntent(), VOICE)
+                    } catch (e: Exception) {
+                        post(JSONObject().put("type", "toast").put("text", "На телефоне нет распознавания речи (нужно приложение Google)"))
+                    }
+                }
+                return null
+            }
+
             "notificationSettings" -> {
                 startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
                 return null
@@ -343,6 +378,18 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == VOICE) {
+            val best = if (resultCode == RESULT_OK) Quick.bestPhrase(data) else null
+            if (best == null) return
+            val (phrase, _) = best
+            Store.worker.execute {
+                val r = Quick.add(this, phrase)
+                if (r != null) post(JSONObject().put("type", "toast").put("text",
+                    "Напомню ${QuickParser.describe(r.at, LocalDateTime.now())}: ${r.text}"))
+                else runOnUiThread { quickText = phrase; deliverQuickText() }
+            }
+            return
+        }
         if (requestCode != PICK_ICON) return
         val replyId = pickIconReply ?: return
         pickIconReply = null

@@ -110,6 +110,7 @@ object Alarms {
 
     fun scheduleNext(ctx: Context) {
         Store.load(ctx)
+        runCatching { QuickWidget.refresh(ctx) }
         val now = LocalDateTime.now()
         val times = mutableListOf<Long>()
         Store.reminders.mapTo(times) { it.at }

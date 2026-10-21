@@ -6,4 +6,9 @@
         <item name="android:navigationBarColor">@color/frame</item>
         <item name="android:colorAccent">#DCDCDC</item>
     </style>
+
+    <!-- Invisible activity that only asks for speech. -->
+    <style name="VoiceTheme" parent="android:Theme.Translucent.NoTitleBar">
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
 </resources>
