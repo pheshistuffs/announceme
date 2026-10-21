@@ -23,6 +23,12 @@ static class Program
         }
 
         ApplicationConfiguration.Initialize();
+        // A failure in one button should not close the whole app with an error window.
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += (_, e) => Report(e.Exception);
+        // Load every library up front: assemblies packed into the exe that are loaded late
+        // have failed to load on some PCs (FileNotFoundException System.Threading.ThreadPool).
+        Preload(typeof(Program).Assembly, new HashSet<string>());
         Store.Load();
         Protocol.Register();
 
@@ -31,6 +37,24 @@ static class Program
         if (command != "announceme:show") tray.InvokeCommand(command);
 
         Application.Run(tray);
+    }
+
+    static void Preload(System.Reflection.Assembly asm, HashSet<string> seen)
+    {
+        foreach (var name in asm.GetReferencedAssemblies())
+        {
+            if (!seen.Add(name.FullName)) continue;
+            try { Preload(System.Reflection.Assembly.Load(name), seen); }
+            catch { }
+        }
+    }
+
+    static void Report(Exception e)
+    {
+        try { File.AppendAllText(Path.Combine(Store.Dir, "errors.log"), $"{DateTime.Now:s} {e}\n\n"); } catch { }
+        MessageBox.Show("Что-то пошло не так, но AnnounceMe продолжает работать.\n\n" + e.Message +
+                        "\n\nПодробности в файле errors.log в папке %APPDATA%\\AnnounceMe.",
+            "AnnounceMe", MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 
     static void SendToRunning(string command)
