@@ -27,6 +27,7 @@ public class MainForm : Form
             MultiSelect = false,
             HideSelection = false,
             SmallImageList = _icons,
+            ShowItemToolTips = true,
         };
         _list.Columns.Add("Название", 200);
         _list.Columns.Add("Когда", 200);
@@ -228,7 +229,9 @@ public class MainForm : Form
             var item = new ListViewItem(s.DisplayName, imageIndex) { Tag = s };
             item.SubItems.Add(s.ScheduleText());
             item.SubItems.Add(next);
-            item.SubItems.Add(string.IsNullOrWhiteSpace(s.Title) ? s.Text : $"{s.Title}. {s.Text}");
+            var fullText = string.IsNullOrWhiteSpace(s.Title) ? s.Text : $"{s.Title}. {s.Text}";
+            item.SubItems.Add(fullText);
+            item.ToolTipText = fullText;
             if (!s.Enabled) item.ForeColor = SystemColors.GrayText;
             _list.Items.Add(item);
             if (s.Id == selectedId) item.Selected = true;

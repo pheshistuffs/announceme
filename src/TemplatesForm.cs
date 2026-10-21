@@ -4,6 +4,13 @@ namespace AnnounceMe;
 public class TemplatesForm : Form
 {
     readonly ListView _list;
+    readonly Label _details;
+
+    void FitTextColumn()
+    {
+        int used = _list.Columns[0].Width + _list.Columns[1].Width;
+        _list.Columns[2].Width = Math.Max(200, _list.ClientSize.Width - used - 4);
+    }
 
     public TemplatesForm()
     {
@@ -33,10 +40,30 @@ public class TemplatesForm : Form
             View = View.Details,
             CheckBoxes = true,
             FullRowSelect = true,
+            ShowItemToolTips = true,
         };
         _list.Columns.Add("Название", 190);
         _list.Columns.Add("Когда", 250);
         _list.Columns.Add("Текст", 340);
+        // The text column takes whatever width is left, and the selected template's
+        // full text is shown under the list.
+        _list.Resize += (_, _) => FitTextColumn();
+        _details = new Label
+        {
+            Dock = DockStyle.Bottom,
+            AutoSize = false,
+            Height = 44,
+            Padding = new Padding(8, 6, 8, 0),
+            Text = "Наведите на строку или выберите её, чтобы увидеть текст целиком.",
+            ForeColor = SystemColors.GrayText,
+        };
+        _list.SelectedIndexChanged += (_, _) =>
+        {
+            if (_list.SelectedItems.Count == 0) return;
+            var t = (Template)_list.SelectedItems[0].Tag;
+            _details.ForeColor = SystemColors.ControlText;
+            _details.Text = $"{t.Name}: {t.Text}";
+        };
 
         var groups = new Dictionary<string, ListViewGroup>();
         foreach (var t in Templates.All)
@@ -50,6 +77,7 @@ public class TemplatesForm : Form
             var item = new ListViewItem(t.Name, g) { Tag = t, Checked = Store.Data.Sites.Any(t.Matches) };
             item.SubItems.Add(Templates.Describe(t));
             item.SubItems.Add(t.Text);
+            item.ToolTipText = t.Text;
             _list.Items.Add(item);
         }
 
@@ -66,7 +94,9 @@ public class TemplatesForm : Form
 
         Controls.Add(_list);
         Controls.Add(hint);
+        Controls.Add(_details);
         Controls.Add(buttons);
+        Shown += (_, _) => FitTextColumn();
         AcceptButton = ok;
         CancelButton = cancel;
     }

@@ -90,18 +90,21 @@ public class EditForm : Form
             AutoSize = true,
             Checked = entry.Days.Contains(d),
         }).ToArray();
-        var everyDay = new LinkLabel { Text = "каждый день", AutoSize = true, Margin = new Padding(8, 5, 0, 0) };
-        everyDay.LinkClicked += (_, _) => { foreach (var c in _days) c.Checked = true; };
-        var weekdays = new LinkLabel { Text = "будни", AutoSize = true, Margin = new Padding(8, 5, 0, 0) };
-        weekdays.LinkClicked += (_, _) =>
-        {
-            foreach (var c in _days)
-                c.Checked = (DayOfWeek)c.Tag is not (DayOfWeek.Saturday or DayOfWeek.Sunday);
-        };
         var daysRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };
         daysRow.Controls.AddRange(_days);
-        daysRow.Controls.Add(everyDay);
-        daysRow.Controls.Add(weekdays);
+
+        // Presets on their own line, so they fit in the fixed-width dialog.
+        var presetsRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };
+        void Preset(string text, Func<DayOfWeek, bool> pick)
+        {
+            var link = new LinkLabel { Text = text, AutoSize = true, Margin = new Padding(3, 0, 12, 4) };
+            link.LinkClicked += (_, _) => { foreach (var c in _days) c.Checked = pick((DayOfWeek)c.Tag); };
+            presetsRow.Controls.Add(link);
+        }
+        static bool IsWeekend(DayOfWeek d) => d is DayOfWeek.Saturday or DayOfWeek.Sunday;
+        Preset("каждый день", _ => true);
+        Preset("будни", d => !IsWeekend(d));
+        Preset("выходные", IsWeekend);
 
         _times = new TextBox
         {
@@ -117,6 +120,7 @@ public class EditForm : Form
         AddRow(grid, "Текст:", _text);
         AddRow(grid, "Иконка:", iconRow);
         AddRow(grid, "Дни:", daysRow);
+        AddRow(grid, "", presetsRow);
         AddRow(grid, "Время:", _times);
         AddRow(grid, "", new Label
         {
