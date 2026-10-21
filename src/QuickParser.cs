@@ -31,7 +31,8 @@ public static class QuickParser
     public static Result Parse(string input, DateTime now)
     {
         if (string.IsNullOrWhiteSpace(input)) return null;
-        var s = NumbersToDigits(input.Trim());
+        // Voice typing ends phrases with a full stop.
+        var s = NumbersToDigits(input.Trim().TrimEnd('.', '!', '…').TrimEnd());
         DateTime? at = null;
 
         var through = Through.Match(s);

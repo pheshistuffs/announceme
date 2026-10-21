@@ -656,11 +656,31 @@ $("soonTest").addEventListener("click", () => {
 
 /* quick reminder card */
 $("quickMic").innerHTML = svg("mic");
+// On Windows, voice typing types into the focused field; once the words stop coming,
+// the reminder is set on its own.
+let voiceUntil = 0, voiceTimer;
 $("quickMic").addEventListener("click", () => {
-  // On Windows, voice typing types into the focused field, so focus it first.
   $("quickInput").focus();
+  if (!document.documentElement.classList.contains("android")) voiceUntil = Date.now() + 60000;
   run("voice");
 });
+function voiceTyped() {
+  if (Date.now() > voiceUntil) return;
+  clearTimeout(voiceTimer);
+  voiceTimer = setTimeout(async () => {
+    const text = $("quickInput").value;
+    if (!text.trim() || Date.now() > voiceUntil) return;
+    const r = await call("parseQuick", { text }).catch(() => null);
+    // Wait while only the time is heard so far: the "what" usually follows.
+    if (!r || r.text === "Напоминание") return;
+    voiceUntil = 0;
+    try {
+      await run("addQuick", { text }, "Напоминание поставлено");
+      $("quickInput").value = "";
+      updateQuickPreview();
+    } catch { }
+  }, 2000);
+}
 window.setQuickText = text => {
   $("quickInput").value = text;
   updateQuickPreview();
@@ -671,6 +691,7 @@ let parseTimer;
 $("quickInput").addEventListener("input", () => {
   clearTimeout(parseTimer);
   parseTimer = setTimeout(updateQuickPreview, 120);
+  voiceTyped();
 });
 $("quickInput").addEventListener("keydown", async e => {
   if (e.key === "Enter") {

@@ -7,6 +7,7 @@ public class QuickForm : Form
     readonly TextBox _input;
     readonly Label _preview;
     DateTime _voiceUntil;
+    readonly System.Windows.Forms.Timer _voiceDone = new() { Interval = 2000 };
 
     public QuickForm(TrayContext ctx)
     {
@@ -32,7 +33,22 @@ public class QuickForm : Form
             PlaceholderText = "через 5 минут достать курицу из духовки",
             Margin = new Padding(0, 0, 0, 6),
         };
-        _input.TextChanged += (_, _) => UpdatePreview();
+        _input.TextChanged += (_, _) =>
+        {
+            UpdatePreview();
+            if (DateTime.Now < _voiceUntil)
+            {
+                _voiceDone.Stop();
+                _voiceDone.Start();
+            }
+        };
+        // After dictation, set the reminder once the words stop coming.
+        _voiceDone.Tick += (_, _) =>
+        {
+            _voiceDone.Stop();
+            // Wait while only the time is heard so far: the "what" usually follows.
+            if (DateTime.Now < _voiceUntil && QuickParser.Parse(_input.Text, DateTime.Now) is { Text: not "Напоминание" }) Submit();
+        };
 
         var mic = new Button { Text = "🎤 Голосом", AutoSize = true, Font = new Font("Segoe UI", 11f), Margin = new Padding(6, 0, 0, 6) };
         mic.Click += async (_, _) =>
@@ -60,7 +76,7 @@ public class QuickForm : Form
         var hint = new Label
         {
             Text = "Примеры: «через 5 минут достать курицу», «в 18:30 позвонить маме», «завтра в 9 купить хлеб», «10м чай».\n" +
-                   "Enter — поставить, Esc — закрыть. Голосом: кнопка 🎤 или Win+H.",
+                   "Enter — поставить, Esc — закрыть. Голосом: кнопка 🎤, после диктовки напоминание ставится само.",
             AutoSize = true,
             MaximumSize = new Size(560, 0),
             ForeColor = SystemColors.GrayText,
@@ -147,6 +163,7 @@ public class QuickForm : Form
             System.Media.SystemSounds.Beep.Play();
             return;
         }
+        _voiceUntil = default;
         _ctx.AddReminder(r.At, r.Text);
         Hide();
     }
