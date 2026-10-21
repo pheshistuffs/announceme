@@ -10,7 +10,7 @@ public class MainForm : Form
     public MainForm(TrayContext ctx)
     {
         _ctx = ctx;
-        Text = "AnnounceMe — напоминания о сайтах";
+        Text = "AnnounceMe — напоминания";
         Icon = TrayContext.AppIcon;
         Font = new Font("Segoe UI", 9.5f);
         StartPosition = FormStartPosition.CenterScreen;
@@ -71,11 +71,120 @@ public class MainForm : Form
         };
         bottom.Controls.AddRange(new Control[] { autostart, catchUp });
 
-        Controls.Add(_list);
-        Controls.Add(buttons);
+        var sitesPage = new TabPage("Сайты по расписанию");
+        sitesPage.Controls.Add(_list);
+        sitesPage.Controls.Add(buttons);
+
+        _reminders = new ListView
+        {
+            Dock = DockStyle.Fill,
+            View = View.Details,
+            FullRowSelect = true,
+            HideSelection = false,
+        };
+        _reminders.Columns.Add("Когда", 220);
+        _reminders.Columns.Add("Текст", 520);
+        _reminders.KeyDown += (_, e) => { if (e.KeyCode == Keys.Delete) DeleteReminders(); };
+        var newReminder = new Button { Text = "Новое…", AutoSize = true };
+        newReminder.Click += (_, _) => _ctx.ShowQuick();
+        var deleteReminder = new Button { Text = "Удалить", AutoSize = true };
+        deleteReminder.Click += (_, _) => DeleteReminders();
+        var reminderButtons = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(6) };
+        reminderButtons.Controls.AddRange(new Control[] { newReminder, deleteReminder });
+        var remindersPage = new TabPage("Быстрые напоминания");
+        remindersPage.Controls.Add(_reminders);
+        remindersPage.Controls.Add(reminderButtons);
+
+        var tabs = new TabControl { Dock = DockStyle.Fill };
+        tabs.TabPages.Add(sitesPage);
+        tabs.TabPages.Add(remindersPage);
+
+        bottom.Controls.Add(BuildHotkeyRow());
+
+        Controls.Add(tabs);
         Controls.Add(bottom);
 
         RefreshList();
+        RefreshReminders();
+        _clock.Tick += (_, _) => RefreshReminders();
+        _clock.Start();
+    }
+
+    readonly ListView _reminders;
+    readonly System.Windows.Forms.Timer _clock = new() { Interval = 30_000 };
+
+    Control BuildHotkeyRow()
+    {
+        var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };
+        var box = new TextBox
+        {
+            Width = 160,
+            ReadOnly = true,
+            Text = Store.Data.QuickHotkey,
+            PlaceholderText = "выключена",
+            BackColor = SystemColors.Window,
+        };
+        var status = new Label { AutoSize = true, Margin = new Padding(6, 6, 0, 0) };
+        void Apply(string value)
+        {
+            Store.Data.QuickHotkey = value;
+            Store.Save();
+            box.Text = value;
+            bool ok = _ctx.ApplyHotkey();
+            status.ForeColor = ok ? SystemColors.GrayText : Color.Firebrick;
+            status.Text = ok ? (value.Length > 0 ? "работает" : "") : "занята другой программой, выберите другую";
+        }
+        box.KeyDown += (_, e) =>
+        {
+            e.Handled = e.SuppressKeyPress = true;
+            var key = e.KeyCode;
+            if (key is Keys.ControlKey or Keys.ShiftKey or Keys.Menu or Keys.LWin or Keys.RWin) return;
+            if (key is Keys.Back or Keys.Delete && e.Modifiers == Keys.None) { Apply(""); return; }
+            if ((e.Modifiers & (Keys.Control | Keys.Alt)) == 0) return; // needs Ctrl or Alt
+            Apply(GlobalHotkey.Format(e.Modifiers | key));
+        };
+        var reset = new LinkLabel { Text = "по умолчанию", AutoSize = true, Margin = new Padding(6, 6, 0, 0) };
+        reset.LinkClicked += (_, _) => Apply("Ctrl+Alt+N");
+        row.Controls.Add(new Label
+        {
+            Text = "Горячая клавиша быстрого напоминания (нажмите сочетание в поле):",
+            AutoSize = true,
+            Margin = new Padding(3, 6, 6, 0),
+        });
+        row.Controls.AddRange(new Control[] { box, reset, status });
+        Apply(Store.Data.QuickHotkey);
+        return row;
+    }
+
+    public void RefreshReminders()
+    {
+        if (IsDisposed) return;
+        var now = DateTime.Now;
+        _reminders.BeginUpdate();
+        _reminders.Items.Clear();
+        foreach (var r in Store.Data.Reminders)
+        {
+            var at = r.AtUtc.ToLocalTime();
+            var item = new ListViewItem(at > now ? QuickParser.Describe(at, now) : "сейчас") { Tag = r };
+            item.SubItems.Add(r.Text);
+            _reminders.Items.Add(item);
+        }
+        _reminders.EndUpdate();
+    }
+
+    void DeleteReminders()
+    {
+        var selected = _reminders.SelectedItems.Cast<ListViewItem>().Select(i => (Reminder)i.Tag).ToList();
+        if (selected.Count == 0) return;
+        foreach (var r in selected) Store.Data.Reminders.Remove(r);
+        Store.Save();
+        RefreshReminders();
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _clock.Dispose();
+        base.Dispose(disposing);
     }
 
     SiteEntry Selected => _list.SelectedItems.Count > 0 ? (SiteEntry)_list.SelectedItems[0].Tag : null;

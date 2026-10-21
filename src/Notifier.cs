@@ -47,6 +47,43 @@ public static class Notifier
         ToastNotificationManager.CreateToastNotifier(aumid).Show(new ToastNotification(doc));
     }
 
+    const string ReminderAumid = "AnnounceMe.Reminder";
+
+    public static void ShowReminder(Reminder r)
+    {
+        var iconPath = Path.Combine(Store.Dir, "reminder.png");
+        if (!File.Exists(iconPath))
+        {
+            using var src = typeof(Notifier).Assembly.GetManifestResourceStream("app.png");
+            using var f = File.Create(iconPath);
+            src.CopyTo(f);
+        }
+        using (var key = Registry.CurrentUser.CreateSubKey($@"{AumidRoot}\{ReminderAumid}"))
+        {
+            key.SetValue("DisplayName", "Напоминание");
+            key.SetValue("IconUri", iconPath);
+        }
+
+        var text = SecurityElement.Escape(r.Text);
+        var at = r.AtUtc.ToLocalTime().ToString("HH:mm");
+        var snoozeText = Uri.EscapeDataString(r.Text);
+        string Snooze(int min) => SecurityElement.Escape($"announceme:snooze?min={min}&text={snoozeText}");
+
+        var xml =
+            "<toast scenario=\"reminder\" launch=\"announceme:noop\" activationType=\"protocol\">" +
+            $"<visual><binding template=\"ToastGeneric\"><text>{text}</text><text>На {at}</text></binding></visual>" +
+            "<actions>" +
+            $"<action content=\"Ещё 5 мин\" activationType=\"protocol\" arguments=\"{Snooze(5)}\"/>" +
+            $"<action content=\"Ещё 15 мин\" activationType=\"protocol\" arguments=\"{Snooze(15)}\"/>" +
+            "<action content=\"Готово\" activationType=\"system\" arguments=\"dismiss\"/>" +
+            "</actions>" +
+            "</toast>";
+
+        var doc = new XmlDocument();
+        doc.LoadXml(xml);
+        ToastNotificationManager.CreateToastNotifier(ReminderAumid).Show(new ToastNotification(doc));
+    }
+
     static void Register(SiteEntry e, string aumid)
     {
         using (var key = Registry.CurrentUser.CreateSubKey($@"{AumidRoot}\{aumid}"))

@@ -51,9 +51,19 @@ public class SiteEntry
     }
 }
 
+public class Reminder
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N")[..12];
+    public DateTime AtUtc { get; set; }
+    public string Text { get; set; } = "";
+}
+
 public class AppData
 {
     public List<SiteEntry> Sites { get; set; } = new();
+    public List<Reminder> Reminders { get; set; } = new();
+    // Global hotkey for a quick reminder, e.g. "Ctrl+Alt+N"; empty turns it off.
+    public string QuickHotkey { get; set; } = "Ctrl+Alt+N";
     public bool CatchUpMissed { get; set; } = true;
     public bool Paused { get; set; }
     public bool TrayHintShown { get; set; }

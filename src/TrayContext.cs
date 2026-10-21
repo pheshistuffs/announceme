@@ -6,9 +6,11 @@ public class TrayContext : ApplicationContext
 {
     readonly NotifyIcon _tray;
     readonly System.Windows.Forms.Timer _timer;
-    readonly ToolStripMenuItem _pauseItem;
+    readonly ToolStripMenuItem _pauseItem, _quickItem;
     readonly Control _invoker = new();
+    readonly GlobalHotkey _hotkey = new();
     MainForm _main;
+    QuickForm _quick;
     bool _checking;
 
     public static Icon AppIcon { get; } = LoadAppIcon();
@@ -23,12 +25,14 @@ public class TrayContext : ApplicationContext
     {
         _invoker.CreateControl();
 
-        _pauseItem = new ToolStripMenuItem("Пауза уведомлений", null, (_, _) => TogglePause())
+        _pauseItem = new ToolStripMenuItem("Пауза уведомлений о сайтах", null, (_, _) => TogglePause())
         {
             Checked = Store.Data.Paused,
         };
+        _quickItem = new ToolStripMenuItem("Быстрое напоминание…", null, (_, _) => ShowQuick());
         var menu = new ContextMenuStrip();
-        menu.Items.Add("Открыть список сайтов", null, (_, _) => ShowMain());
+        menu.Items.Add(_quickItem);
+        menu.Items.Add("Открыть список", null, (_, _) => ShowMain());
         menu.Items.Add(_pauseItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Выход", null, (_, _) => Exit());
@@ -36,13 +40,16 @@ public class TrayContext : ApplicationContext
         _tray = new NotifyIcon
         {
             Icon = AppIcon,
-            Text = "AnnounceMe — напоминания о сайтах",
+            Text = "AnnounceMe — напоминания",
             ContextMenuStrip = menu,
             Visible = true,
         };
         _tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowMain(); };
 
-        _timer = new System.Windows.Forms.Timer { Interval = 15_000 };
+        _hotkey.Pressed += ShowQuick;
+        ApplyHotkey();
+
+        _timer = new System.Windows.Forms.Timer { Interval = 5_000 };
         _timer.Tick += async (_, _) => await CheckAsync();
         _timer.Start();
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
@@ -51,6 +58,15 @@ public class TrayContext : ApplicationContext
         Autostart.Refresh();
         if (!startHidden) ShowMain();
         _ = CheckAsync();
+    }
+
+    // Registers the hotkey from settings. Returns false when another program holds it.
+    public bool ApplyHotkey()
+    {
+        var keys = GlobalHotkey.Parse(Store.Data.QuickHotkey);
+        bool ok = _hotkey.Set(keys);
+        _quickItem.ShortcutKeyDisplayString = ok && keys != Keys.None ? GlobalHotkey.Format(keys) : null;
+        return ok;
     }
 
     void OnPowerModeChanged(object sender, PowerModeChangedEventArgs e)
@@ -62,12 +78,21 @@ public class TrayContext : ApplicationContext
 
     async Task CheckAsync()
     {
-        if (_checking || Store.Data.Paused) return;
+        if (_checking) return;
         _checking = true;
         try
         {
-            var now = DateTime.Now;
-            foreach (var e in Schedule.Due(Store.Data, now))
+            var dueReminders = Store.Data.Reminders.Where(r => r.AtUtc <= DateTime.UtcNow).ToList();
+            if (dueReminders.Count > 0)
+            {
+                foreach (var r in dueReminders) Store.Data.Reminders.Remove(r);
+                Store.Save();
+                foreach (var r in dueReminders) ShowReminder(r);
+                _main?.RefreshReminders();
+            }
+
+            if (Store.Data.Paused) return;
+            foreach (var e in Schedule.Due(Store.Data, DateTime.Now))
             {
                 e.LastFiredUtc = DateTime.UtcNow;
                 Store.Save();
@@ -77,6 +102,18 @@ public class TrayContext : ApplicationContext
         finally
         {
             _checking = false;
+        }
+    }
+
+    void ShowReminder(Reminder r)
+    {
+        try
+        {
+            Notifier.ShowReminder(r);
+        }
+        catch (Exception ex)
+        {
+            _tray.ShowBalloonTip(5000, r.Text, $"Не удалось показать уведомление: {ex.Message}", ToolTipIcon.Warning);
         }
     }
 
@@ -93,7 +130,49 @@ public class TrayContext : ApplicationContext
         _main?.RefreshList();
     }
 
-    public void InvokeShowMain() => _invoker.BeginInvoke(ShowMain);
+    public void AddReminder(DateTime atLocal, string text)
+    {
+        Store.Data.Reminders.Add(new Reminder { AtUtc = atLocal.ToUniversalTime(), Text = text });
+        Store.Data.Reminders.Sort((a, b) => a.AtUtc.CompareTo(b.AtUtc));
+        Store.Save();
+        _main?.RefreshReminders();
+    }
+
+    // Commands from a second launch of the exe or from notification buttons (announceme:...).
+    public void InvokeCommand(string command) => _invoker.BeginInvoke(() => HandleCommand(command));
+
+    void HandleCommand(string command)
+    {
+        if (!Uri.TryCreate(command, UriKind.Absolute, out var u) || u.Scheme != "announceme")
+        {
+            ShowMain();
+            return;
+        }
+        var path = u.AbsolutePath.Trim('/').ToLowerInvariant();
+        switch (path)
+        {
+            case "noop":
+                break;
+            case "quick":
+                ShowQuick();
+                break;
+            case "snooze":
+                var q = System.Web.HttpUtility.ParseQueryString(u.Query);
+                int min = int.TryParse(q["min"], out var m) && m > 0 ? m : 5;
+                AddReminder(DateTime.Now.AddMinutes(min), q["text"] ?? "Напоминание");
+                break;
+            default:
+                ShowMain();
+                break;
+        }
+    }
+
+    public void ShowQuick()
+    {
+        if (_quick == null || _quick.IsDisposed)
+            _quick = new QuickForm(this);
+        _quick.ShowAndFocus();
+    }
 
     void ShowMain()
     {
@@ -138,9 +217,11 @@ public class TrayContext : ApplicationContext
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         SystemEvents.TimeChanged -= OnTimeChanged;
         _timer.Stop();
+        _hotkey.Dispose();
         _tray.Visible = false;
         _tray.Dispose();
         _main?.Dispose();
+        _quick?.Dispose();
         ExitThread();
     }
 }

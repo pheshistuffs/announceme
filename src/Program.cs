@@ -1,3 +1,4 @@
+using System.IO.Pipes;
 using Microsoft.Win32;
 
 namespace AnnounceMe;
@@ -5,32 +6,80 @@ namespace AnnounceMe;
 static class Program
 {
     const string MutexName = @"Local\AnnounceMe.SingleInstance";
-    const string ShowEventName = @"Local\AnnounceMe.Show";
+    static readonly string PipeName = $"AnnounceMe.{Environment.UserName}";
 
     [STAThread]
     static void Main(string[] args)
     {
+        // "announceme:..." links from notification buttons, or "show" when started again.
+        var command = args.FirstOrDefault(a => a.StartsWith("announceme:", StringComparison.OrdinalIgnoreCase))
+                      ?? (args.Contains("--quick") ? "announceme:quick" : "announceme:show");
+
         using var mutex = new Mutex(true, MutexName, out bool first);
         if (!first)
         {
-            // Already running: ask that instance to show its window.
-            try { EventWaitHandle.OpenExisting(ShowEventName).Set(); } catch { }
+            SendToRunning(command);
             return;
         }
 
         ApplicationConfiguration.Initialize();
         Store.Load();
+        Protocol.Register();
 
-        using var showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
-        var tray = new TrayContext(startHidden: args.Contains("--tray"));
-        var waiter = new Thread(() =>
-        {
-            while (showEvent.WaitOne())
-                tray.InvokeShowMain();
-        }) { IsBackground = true };
-        waiter.Start();
+        var tray = new TrayContext(startHidden: args.Contains("--tray") || command != "announceme:show");
+        new Thread(() => ListenForCommands(tray)) { IsBackground = true }.Start();
+        if (command != "announceme:show") tray.InvokeCommand(command);
 
         Application.Run(tray);
+    }
+
+    static void SendToRunning(string command)
+    {
+        try
+        {
+            using var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.Out);
+            pipe.Connect(3000);
+            using var w = new StreamWriter(pipe);
+            w.WriteLine(command);
+        }
+        catch { }
+    }
+
+    static void ListenForCommands(TrayContext tray)
+    {
+        while (true)
+        {
+            try
+            {
+                using var pipe = new NamedPipeServerStream(PipeName, PipeDirection.In, 1,
+                    PipeTransmissionMode.Byte, PipeOptions.CurrentUserOnly);
+                pipe.WaitForConnection();
+                using var r = new StreamReader(pipe);
+                var line = r.ReadLine();
+                if (!string.IsNullOrWhiteSpace(line)) tray.InvokeCommand(line.Trim());
+            }
+            catch
+            {
+                Thread.Sleep(500);
+            }
+        }
+    }
+}
+
+// The announceme: link scheme, so buttons on notifications can reach the running app.
+public static class Protocol
+{
+    public static void Register()
+    {
+        try
+        {
+            using var k = Registry.CurrentUser.CreateSubKey(@"Software\Classes\announceme");
+            k.SetValue("", "URL:AnnounceMe");
+            k.SetValue("URL Protocol", "");
+            using var cmd = k.CreateSubKey(@"shell\open\command");
+            cmd.SetValue("", $"\"{Environment.ProcessPath}\" \"%1\"");
+        }
+        catch { }
     }
 }
 
