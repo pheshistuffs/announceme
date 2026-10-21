@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>AnnounceMe</title>
 <style>
   :root {
@@ -210,7 +210,45 @@
   .toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); background: #111; color: #fff; padding: 10px 18px; border-radius: 999px; opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; z-index: 30; max-width: 80%; }
   .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
-  @media (max-width: 1100px) {
+  /* Phone: one column, sections in a bottom bar. */
+  html.android .win-only { display: none !important; }
+  @media (max-width: 760px) {
+    body { overflow-y: auto; -webkit-tap-highlight-color: transparent; }
+    .app {
+      height: auto; min-height: 100%;
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: none;
+      grid-template-areas: "quick" "main" "soon" "today" "state";
+      padding: max(10px, env(safe-area-inset-top)) 10px calc(88px + env(safe-area-inset-bottom));
+      gap: 10px;
+    }
+    .card { border-radius: 24px; }
+    .side {
+      position: fixed; left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 10;
+      flex-direction: row; justify-content: space-around; padding: 8px 12px; height: 64px;
+      background: rgba(34,34,34,.92); backdrop-filter: blur(16px); box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+    .side .logo, .side .sep, .side .grow, .nav .tip { display: none; }
+    .nav { width: 48px; height: 48px; }
+    .main { min-height: 60vh; padding: 16px 14px 14px; }
+    .scroll { overflow: visible; margin: 0; padding: 0; }
+    .head .tabs { width: 100%; }
+    .tab { flex: 1; text-align: center; padding: 8px 6px; }
+    .row { flex-wrap: wrap; gap: 12px; }
+    .row .body { flex: 1 1 calc(100% - 60px); }
+    .row .side-actions { width: 100%; justify-content: flex-end; border-top: 1px solid var(--line); padding-top: 6px; }
+    .icon-btn { width: 40px; height: 40px; }
+    .foot { flex-wrap: wrap; }
+    .soon-list { overflow: visible; }
+    .mini { min-height: 210px; }
+    .tgrid { grid-template-columns: minmax(0, 1fr); }
+    .overlay { padding: 0; align-items: flex-end; }
+    .dialog { border-radius: 24px 24px 0 0; max-height: 92%; }
+    .inline .field { min-width: 0; flex-basis: 100%; }
+    .day { flex: 1; width: auto; min-width: 38px; }
+    .field { font-size: 16px; }
+  }
+  @media (max-width: 1100px) and (min-width: 761px) {
     .app { grid-template-columns: 68px minmax(0, 1fr) minmax(0, 1fr) 280px; }
   }
 </style>
@@ -248,7 +286,7 @@
       <button class="icon-btn" data-close title="Закрыть"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <div class="dbody">
       <div class="form-row"><label>Ссылка: сайт, steam://… или программа. Можно оставить пустой</label>
-        <div class="inline"><input class="field" id="edUrl" placeholder="https://www.chess.com/"><button class="btn ghost" id="edProgram">Программа…</button></div></div>
+        <div class="inline"><input class="field" id="edUrl" placeholder="https://www.chess.com/"><button class="btn ghost win-only" id="edProgram">Программа…</button></div></div>
       <div class="form-row"><label>Название (от кого придёт уведомление)</label><input class="field" id="edName" placeholder="chess.com, Genshin Impact, Тренировка…"></div>
       <div class="form-row"><label>Заголовок, необязательно</label><input class="field" id="edHeading"></div>
       <div class="form-row"><label>Текст</label><textarea class="field" id="edText" placeholder="Обновились ежедневные задачи по шахматам"></textarea></div>
@@ -299,7 +337,13 @@ const ICONS = {
 const svg = (name, extra = "") => `<svg viewBox="0 0 24 24" ${extra}>${ICONS[name]}</svg>`;
 
 /* ---------- bridge ---------- */
-const host = window.chrome && window.chrome.webview;
+// Windows: WebView2 (chrome.webview). Android: a JavaScript interface named Android,
+// which answers through window.onHostMessage.
+const winHost = window.chrome && window.chrome.webview;
+const androidHost = window.Android;
+const host = winHost || androidHost;
+const isAndroid = !!androidHost || new URLSearchParams(location.search).has("mobile");
+if (isAndroid) document.documentElement.classList.add("android");
 let seq = 0;
 const waiting = new Map();
 function call(cmd, args = {}) {
@@ -307,7 +351,8 @@ function call(cmd, args = {}) {
   return new Promise((resolve, reject) => {
     const id = ++seq;
     waiting.set(id, { resolve, reject });
-    host.postMessage({ id, cmd, args });
+    if (winHost) winHost.postMessage({ id, cmd, args });
+    else androidHost.call(JSON.stringify({ id, cmd, args }));
   });
 }
 function onHostMessage(m) {
@@ -319,7 +364,8 @@ function onHostMessage(m) {
     m.ok ? w.resolve(m.data) : w.reject(new Error(m.error));
   }
 }
-if (host) host.addEventListener("message", e => onHostMessage(e.data));
+if (winHost) winHost.addEventListener("message", e => onHostMessage(e.data));
+window.onHostMessage = onHostMessage;
 
 let toastTimer;
 function toast(text) {
@@ -443,12 +489,15 @@ function renderSettings() {
   const sw = (key, title, sub) => `<div class="setting" data-setting="${key}"><div class="t"><b>${title}</b><span>${sub}</span></div><div class="switch ${st[key] ? "on" : ""}"></div></div>`;
   $("view").innerHTML =
     sw("paused", "Пауза ежедневных", "Ежедневные напоминания не приходят, быстрые приходят") +
-    sw("autostart", "Запускать вместе с Windows", "Приложение тихо стартует в трее") +
-    sw("catchUp", "Показывать пропущенные", "Если компьютер был выключен в нужное время, уведомление придёт после включения (до 12 часов)") +
-    `<div class="setting" style="cursor:default"><div class="t"><b>Горячая клавиша быстрого напоминания</b><span>Нажмите в поле нужное сочетание с Ctrl или Alt. Backspace выключает.</span></div>
+    (isAndroid ? "" : sw("autostart", "Запускать вместе с Windows", "Приложение тихо стартует в трее")) +
+    sw("catchUp", "Показывать пропущенные", isAndroid
+      ? "Если телефон был выключен в нужное время, уведомление придёт после включения (до 12 часов)"
+      : "Если компьютер был выключен в нужное время, уведомление придёт после включения (до 12 часов)") +
+    (isAndroid ? `<div class="setting" data-action="notif-settings"><div class="t"><b>Настройки уведомлений</b><span>Звук, вибрация и показ на заблокированном экране</span></div>${svg("open")}</div>` : "") +
+    `<div class="setting win-only" style="cursor:default"><div class="t"><b>Горячая клавиша быстрого напоминания</b><span>Нажмите в поле нужное сочетание с Ctrl или Alt. Backspace выключает.</span></div>
       <input class="field hotkey" id="hotkey" readonly value="${esc(st.hotkey)}" placeholder="выключена"></div>` +
-    `<div class="setting" data-action="classic"><div class="t"><b>Классический вид</b><span>Простые окна Windows вместо этого дизайна (до перезапуска)</span></div>${svg("open")}</div>`;
-  $("foot").innerHTML = `<span class="muted small">Настройки и иконки хранятся в %APPDATA%\\AnnounceMe</span>`;
+    `<div class="setting win-only" data-action="classic"><div class="t"><b>Классический вид</b><span>Простые окна Windows вместо этого дизайна (до перезапуска)</span></div>${svg("open")}</div>`;
+  $("foot").innerHTML = isAndroid ? "" : `<span class="muted small">Настройки и иконки хранятся в %APPDATA%\\AnnounceMe</span>`;
 }
 
 function upcoming() {
@@ -478,6 +527,7 @@ function countdown(at) {
 }
 
 function hotkeyHint() {
+  if (isAndroid) return "Уведомление придёт, даже если приложение закрыто";
   return state.settings.hotkey ? `Вызов из любого окна: ${state.settings.hotkey}` : "Горячая клавиша выключена";
 }
 
@@ -525,7 +575,7 @@ function renderToday() {
   const left = today.filter(t => t > now).length;
   const pos = d => ((d - start) / dayMs * 100).toFixed(2) + "%";
   $("todayCard").innerHTML = `<div class="top"><div class="grow"><h3>Сегодня</h3></div>
-      <div class="tiny" data-setting="autostart">автозапуск<div class="switch ${state.settings.autostart ? "on" : ""}"></div></div></div>
+      <div class="tiny win-only" data-setting="autostart">автозапуск<div class="switch ${state.settings.autostart ? "on" : ""}"></div></div></div>
     <div class="big-number">${left}</div>
     <div class="sub" style="margin-top:0">${left === 0 ? "больше напоминаний сегодня нет" : plural(left, "напоминание", "напоминания", "напоминаний") + " впереди"}</div>
     <div class="grow"></div>
@@ -548,7 +598,13 @@ document.addEventListener("click", async e => {
   const el = e.target.closest("[data-view],[data-filter],[data-action],[data-setting],[data-tid],[data-minutes],[data-close]");
   if (!el) return;
   if (el.dataset.close !== undefined) return closeEditor();
-  if (el.dataset.view) { view = el.dataset.view; render(); $("view").scrollTop = 0; return; }
+  if (el.dataset.view) {
+    view = el.dataset.view;
+    render();
+    $("view").scrollTop = 0;
+    if (isAndroid) document.querySelector(".main").scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
   if (el.dataset.filter) { filter = el.dataset.filter; render(); return; }
   if (el.dataset.minutes) { await addQuick(+el.dataset.minutes); return; }
   if (el.dataset.setting) {
@@ -578,6 +634,7 @@ document.addEventListener("click", async e => {
       break;
     case "delete-reminder": await run("deleteReminder", { id: el.closest("[data-rid]").dataset.rid }); break;
     case "classic": await run("classic"); break;
+    case "notif-settings": await run("notificationSettings"); break;
   }
 });
 

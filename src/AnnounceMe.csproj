@@ -20,7 +20,7 @@
   <ItemGroup>
     <EmbeddedResource Include="app.ico" LogicalName="app.ico" />
     <EmbeddedResource Include="app.png" LogicalName="app.png" />
-    <EmbeddedResource Include="ui\ui.html" LogicalName="ui.html" />
+    <EmbeddedResource Include="..\ui\ui.html" LogicalName="ui.html" />
   </ItemGroup>
 
   <ItemGroup>

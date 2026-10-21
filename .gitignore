@@ -1,3 +1,8 @@
 bin/
 obj/
 dist/
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
