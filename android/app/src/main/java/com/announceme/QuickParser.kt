@@ -11,24 +11,26 @@ import java.util.regex.Pattern
 object QuickParser {
     data class Result(val at: LocalDateTime, val text: String)
 
-    private const val F = Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE or Pattern.UNICODE_CHARACTER_CLASS
+    // Android's regex engine rejects UNICODE_CHARACTER_CLASS, so letters are spelled out
+    // instead of \w (which would be ASCII-only on a desktop JVM).
+    private const val F = Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE
 
-    private val through = Pattern.compile("(?<!\\w)через(?!\\w)", F)
+    private val through = Pattern.compile("(?<![\\p{L}\\p{N}_])через(?![\\p{L}\\p{N}_])", F)
     private val durPart = Pattern.compile(
-        "\\s*(?:(?<num>\\d+(?:[.,]\\d+)?)\\s*(?<unit>секунд[уы]?|сек|с|минут[уы]?|мин|м|час(?:а|ов)?|ч|дн(?:я|ей)|день|д)(?!\\w)" +
-            "|(?<word>полчаса|полминуты|полтора\\s+часа|пару\\s+минут|минуту|час|сутки)(?!\\w))(?:\\s+и(?!\\w))?", F)
+        "\\s*(?:(?<num>\\d+(?:[.,]\\d+)?)\\s*(?<unit>секунд[уы]?|сек|с|минут[уы]?|мин|м|час(?:а|ов)?|ч|дн(?:я|ей)|день|д)(?![\\p{L}\\p{N}_])" +
+            "|(?<word>полчаса|полминуты|полтора\\s+часа|пару\\s+минут|минуту|час|сутки)(?![\\p{L}\\p{N}_]))(?:\\s+и(?![\\p{L}\\p{N}_]))?", F)
     private val leadingNumber = Pattern.compile("^\\s*(?<num>\\d+)(?=\\s+\\D)", F)
-    private val dayWord = Pattern.compile("(?<!\\w)(?<day>сегодня|завтра|послезавтра)(?!\\w)", F)
+    private val dayWord = Pattern.compile("(?<![\\p{L}\\p{N}_])(?<day>сегодня|завтра|послезавтра)(?![\\p{L}\\p{N}_])", F)
     private val clockFull = Pattern.compile(
-        "(?<!\\w)(?:в\\s+)?(?<h>\\d{1,2})[:.](?<m>\\d{2})(?:\\s*(?<part>утра|дня|вечера|ночи))?(?!\\w)", F)
+        "(?<![\\p{L}\\p{N}_])(?:в\\s+)?(?<h>\\d{1,2})[:.](?<m>\\d{2})(?:\\s*(?<part>утра|дня|вечера|ночи))?(?![\\p{L}\\p{N}_])", F)
     private val clockShort = Pattern.compile(
-        "(?<!\\w)в\\s+(?<h>\\d{1,2})(?:\\s*час(?:а|ов)?)?(?:\\s*(?<part>утра|дня|вечера|ночи))?(?!\\w)", F)
+        "(?<![\\p{L}\\p{N}_])в\\s+(?<h>\\d{1,2})(?:\\s*час(?:а|ов)?)?(?:\\s*(?<part>утра|дня|вечера|ночи))?(?![\\p{L}\\p{N}_])", F)
     private val filler = Pattern.compile(
         "^(?:(?:напомни(?:ть)?|напоминание|мне|что|чтобы|нужно|надо|пора|,|-|—|:)\\s*)+", F)
 
     fun parse(input: String, now: LocalDateTime): Result? {
         if (input.isBlank()) return null
-        var s = input.trim()
+        var s = numbersToDigits(input.trim())
         val at: LocalDateTime
 
         val th = through.matcher(s)
@@ -73,6 +75,30 @@ object QuickParser {
         }
         if (!at.isAfter(now)) return null
         return Result(at, clean(s))
+    }
+
+    private val units = mapOf(
+        "ноль" to 0, "один" to 1, "одна" to 1, "одну" to 1, "два" to 2, "две" to 2, "три" to 3, "четыре" to 4,
+        "пять" to 5, "шесть" to 6, "семь" to 7, "восемь" to 8, "девять" to 9, "десять" to 10,
+        "одиннадцать" to 11, "двенадцать" to 12, "тринадцать" to 13, "четырнадцать" to 14, "пятнадцать" to 15,
+        "шестнадцать" to 16, "семнадцать" to 17, "восемнадцать" to 18, "девятнадцать" to 19)
+    private val tens = mapOf("двадцать" to 20, "тридцать" to 30, "сорок" to 40, "пятьдесят" to 50)
+    private val numberWords = Pattern.compile(
+        "(?<![\\p{L}\\p{N}_])(?:(?<tens>двадцать|тридцать|сорок|пятьдесят)(?:\\s+(?<unit1>один|одна|одну|два|две|три|четыре|пять|шесть|семь|восемь|девять))?" +
+            "|(?<unit2>ноль|одиннадцать|двенадцать|тринадцать|четырнадцать|пятнадцать|шестнадцать|семнадцать|восемнадцать|девятнадцать|десять|один|одна|одну|два|две|три|четыре|пять|шесть|семь|восемь|девять))(?![\\p{L}\\p{N}_])", F)
+
+    // Speech often comes as words: "через пять минут" -> "через 5 минут".
+    fun numbersToDigits(s: String): String {
+        val m = numberWords.matcher(s)
+        val sb = StringBuffer()
+        while (m.find()) {
+            val n = if (m.group("tens") != null)
+                tens.getValue(m.group("tens").lowercase()) + (m.group("unit1")?.let { units.getValue(it.lowercase()) } ?: 0)
+            else units.getValue(m.group("unit2").lowercase())
+            m.appendReplacement(sb, n.toString())
+        }
+        m.appendTail(sb)
+        return sb.toString()
     }
 
     private fun findClock(s: String): Matcher? {

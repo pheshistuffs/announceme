@@ -6,6 +6,7 @@ public class QuickForm : Form
     readonly TrayContext _ctx;
     readonly TextBox _input;
     readonly Label _preview;
+    DateTime _voiceUntil;
 
     public QuickForm(TrayContext ctx)
     {
@@ -33,6 +34,18 @@ public class QuickForm : Form
         };
         _input.TextChanged += (_, _) => UpdatePreview();
 
+        var mic = new Button { Text = "🎤 Голосом", AutoSize = true, Font = new Font("Segoe UI", 11f), Margin = new Padding(6, 0, 0, 6) };
+        mic.Click += async (_, _) =>
+        {
+            // The voice typing panel can take focus for a moment; don't hide while it listens.
+            _voiceUntil = DateTime.Now.AddSeconds(30);
+            _input.Focus();
+            await Task.Delay(200);
+            VoiceTyping.Start();
+        };
+        var inputRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };
+        inputRow.Controls.AddRange(new Control[] { _input, mic });
+
         _preview = new Label { AutoSize = true, MaximumSize = new Size(560, 0), Margin = new Padding(0, 0, 0, 8) };
 
         var presets = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 0, 0, 8) };
@@ -47,7 +60,7 @@ public class QuickForm : Form
         var hint = new Label
         {
             Text = "Примеры: «через 5 минут достать курицу», «в 18:30 позвонить маме», «завтра в 9 купить хлеб», «10м чай».\n" +
-                   "Enter — поставить, Esc — закрыть.",
+                   "Enter — поставить, Esc — закрыть. Голосом: кнопка 🎤 или Win+H.",
             AutoSize = true,
             MaximumSize = new Size(560, 0),
             ForeColor = SystemColors.GrayText,
@@ -60,15 +73,19 @@ public class QuickForm : Form
             WrapContents = false,
             Dock = DockStyle.Fill,
         };
-        layout.Controls.AddRange(new Control[] { _input, _preview, presets, hint });
+        layout.Controls.AddRange(new Control[] { inputRow, _preview, presets, hint });
         Controls.Add(layout);
 
-        Deactivate += (_, _) => Hide();
+        Deactivate += (_, _) =>
+        {
+            if (DateTime.Now > _voiceUntil) Hide();
+        };
         UpdatePreview();
     }
 
     public void ShowAndFocus()
     {
+        _voiceUntil = default;
         _input.Clear();
         UpdatePreview();
         Show();

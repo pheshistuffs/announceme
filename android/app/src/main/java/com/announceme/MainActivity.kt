@@ -184,7 +184,7 @@ class MainActivity : Activity() {
                     if (data !== Deferred) post(reply.put("ok", true).put("data", data ?: JSONObject.NULL))
                 } catch (e: UserError) {
                     post(reply.put("ok", false).put("error", e.message))
-                } catch (e: Exception) {
+                } catch (e: Throwable) {
                     post(reply.put("ok", false).put("error", "Что-то пошло не так: ${e.message}"))
                 }
             }
@@ -383,7 +383,7 @@ class MainActivity : Activity() {
             if (best == null) return
             val (phrase, _) = best
             Store.worker.execute {
-                val r = Quick.add(this, phrase)
+                val r = runCatching { Quick.add(this, phrase) }.getOrNull()
                 if (r != null) post(JSONObject().put("type", "toast").put("text",
                     "Напомню ${QuickParser.describe(r.at, LocalDateTime.now())}: ${r.text}"))
                 else runOnUiThread { quickText = phrase; deliverQuickText() }

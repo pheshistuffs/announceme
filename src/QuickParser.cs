@@ -31,7 +31,7 @@ public static class QuickParser
     public static Result Parse(string input, DateTime now)
     {
         if (string.IsNullOrWhiteSpace(input)) return null;
-        var s = input.Trim();
+        var s = NumbersToDigits(input.Trim());
         DateTime? at = null;
 
         var through = Through.Match(s);
@@ -94,6 +94,27 @@ public static class QuickParser
         if (at <= now) return null;
         return new Result(at.Value, CleanText(s));
     }
+
+    static readonly Dictionary<string, int> Units = new()
+    {
+        ["ноль"] = 0, ["один"] = 1, ["одна"] = 1, ["одну"] = 1, ["два"] = 2, ["две"] = 2, ["три"] = 3, ["четыре"] = 4,
+        ["пять"] = 5, ["шесть"] = 6, ["семь"] = 7, ["восемь"] = 8, ["девять"] = 9, ["десять"] = 10,
+        ["одиннадцать"] = 11, ["двенадцать"] = 12, ["тринадцать"] = 13, ["четырнадцать"] = 14, ["пятнадцать"] = 15,
+        ["шестнадцать"] = 16, ["семнадцать"] = 17, ["восемнадцать"] = 18, ["девятнадцать"] = 19,
+    };
+
+    static readonly Dictionary<string, int> Tens = new() { ["двадцать"] = 20, ["тридцать"] = 30, ["сорок"] = 40, ["пятьдесят"] = 50 };
+
+    static readonly Regex NumberWords = new(
+        @"(?<!\w)(?:(?<tens>двадцать|тридцать|сорок|пятьдесят)(?:\s+(?<unit1>один|одна|одну|два|две|три|четыре|пять|шесть|семь|восемь|девять))?" +
+        @"|(?<unit2>ноль|одиннадцать|двенадцать|тринадцать|четырнадцать|пятнадцать|шестнадцать|семнадцать|восемнадцать|девятнадцать|десять|один|одна|одну|два|две|три|четыре|пять|шесть|семь|восемь|девять))(?!\w)", Opts);
+
+    // Dictation often comes as words: "через пять минут" -> "через 5 минут".
+    public static string NumbersToDigits(string s) => NumberWords.Replace(s, m =>
+        (m.Groups["tens"].Success
+            ? Tens[m.Groups["tens"].Value.ToLowerInvariant()] +
+              (m.Groups["unit1"].Success ? Units[m.Groups["unit1"].Value.ToLowerInvariant()] : 0)
+            : Units[m.Groups["unit2"].Value.ToLowerInvariant()]).ToString());
 
     static bool ReadDuration(string s, int pos, out TimeSpan total, out int end)
     {

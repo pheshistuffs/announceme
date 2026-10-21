@@ -434,6 +434,16 @@ public class DashboardForm : Form, IMainView
                 OpenExternal(Str(a, "url"));
                 return null;
 
+            case "voice":
+                BeginInvoke(async () =>
+                {
+                    Activate();
+                    _web.Focus();
+                    await Task.Delay(200);
+                    VoiceTyping.Start();
+                });
+                return null;
+
             case "classic":
                 BeginInvoke(_ctx.FallbackToClassic);
                 return null;

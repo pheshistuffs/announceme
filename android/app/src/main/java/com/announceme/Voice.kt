@@ -65,7 +65,7 @@ class VoiceActivity : Activity() {
         val (phrase, _) = best
         val app = applicationContext
         Store.worker.execute {
-            val r = Quick.add(app, phrase)
+            val r = runCatching { Quick.add(app, phrase) }.getOrNull()
             runOnUiThread {
                 if (r != null) {
                     Toast.makeText(app, "Напомню ${QuickParser.describe(r.at, LocalDateTime.now())}: ${r.text}", Toast.LENGTH_LONG).show()

@@ -277,7 +277,7 @@
     <div class="sub" id="quickSub"></div>
     <div class="quick-row">
       <input class="field" id="quickInput" placeholder="через 5 минут достать курицу из духовки" autocomplete="off">
-      <button class="mic android-only" id="quickMic" title="Сказать голосом"></button>
+      <button class="mic" id="quickMic" title="Сказать голосом"></button>
     </div>
     <div class="preview" id="quickPreview"></div>
     <div class="presets" id="quickPresets"></div>
@@ -656,7 +656,11 @@ $("soonTest").addEventListener("click", () => {
 
 /* quick reminder card */
 $("quickMic").innerHTML = svg("mic");
-$("quickMic").addEventListener("click", () => run("voice"));
+$("quickMic").addEventListener("click", () => {
+  // On Windows, voice typing types into the focused field, so focus it first.
+  $("quickInput").focus();
+  run("voice");
+});
 window.setQuickText = text => {
   $("quickInput").value = text;
   updateQuickPreview();
